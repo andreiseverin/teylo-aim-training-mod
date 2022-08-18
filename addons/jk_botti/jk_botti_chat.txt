@@ -1,0 +1,97 @@
+These are comment lines.  Any lines appearing before the [bot_chat] section
+will be treated as comments and ignored.  Each bot chat section can have up
+to 100 lines of text.  Each line is treated as a separate chat message.
+Lines must be 80 characters or less.  Lines longer than 80 characters will
+be truncated.  The messages in the [bot_chat] section are said randomly
+during the game.  Every 30 seconds the bots will check to see if they
+should speak a [bot_chat] message.  The percent of time they will speak
+a chat message is set by the "bot_chat_percent" value found in the bot.cfg
+file.  Bots that get a kill will speak messages from the [bot_taunt] section.
+The percent of time that they will speak a taunt message is set by the
+"bot_taunt_percent" value in the bot.cfg file.  Bots that get killed will
+speak a message from the [bot_whine] section.  The percent of time that
+they will speak a whine message is set by the "bot_whine_percent" value
+in the bot.cfg file.  You can use "%n" in the [bot_chat] section if you
+wish to fill in the name of the bot speaking that message.  You can use
+"%n" in the [bot_taunt] section to fill in the name of the player that
+was killed.  You can use "%n" in the [bot_whine] section to fill in the
+name of the player that killed this bot.  You can use "%r" in any of these
+sections if you want to fill in a random player name (player names are
+chosen from those currently connected to the server, not from the
+bot_names.txt file).  You can use "%n" or "%r" multiple times in a single
+chat message if you want.
+
+Chat messages will be modified by the BotChatHumanizer code.  This code
+will swap or drop characters in the messages to make the bot appear more
+human (humans make mistakes, bots don't :) ).  Bots will also occasionally
+convert the chat text to all lowercase.  When filling in player's names,
+bots will occasionally remove the clan tags from the name (i.e. clan tags
+can be things like: "[- LPB -]", "{HQ}", "<OoO>", or "-=<Xmen>=-").  So
+if the players name is "[[KLM]]BaDAzz", the bot may modify this to "BaDAzz"
+or "badazz".  The percent of time the bots will remove the clan tag is
+set by the "bot_chat_tag_percent" in the bot.cfg file.  The percent of
+time the bots will drop characters is defined by "bot_chat_drop_percent"
+in the bot.cfg file.  The percent of time the bots will swap characters
+is defined by "bot_chat_swap_percent" in the bot.cfg file and the percent
+of time the bots will convert messages to all lowercase is defined by the
+"bot_chat_lower_percent" value in the bot.cfg file.
+
+If you have a chat message that you don't want to have any characters
+dropped or swapped in (like sending a message with a URL), you can use
+a '!' character as the first character in the chat message to indicate
+that this chat message should not be modified (no drops, swaps, or changing
+to lowercase).  The '!' will be removed from the chat message before it
+gets send to other players.
+
+[bot_chat]
+It's 9am here, ..need sleep Z_z
+%r, what time is there? almost 11am here.
+i'm drunk
+Whats your mouse sensitivity %r? Mine is set on 2.
+!mmmm.. whiskey
+!mmm.. beer
+!mm.. pepsi
+!cocacola.. yuk.. pepsi is better :D
+so.. how long you have been playing this game, %r?
+%r, are you new to this server?
+Hey, whats your fps in this map %r? Mine sux, must be the BOTS!
+Did you get that new STEAM update today?
+!lol
+hahahaha
+!rofl
+!gf
+!n1
+
+[bot_taunt]
+!gf, %n
+!5hp left :D
+!1hp left :S
+I'm almost dead
+where's health?
+where's battery?
+
+[bot_whine]
+i'm drunk lol
+I WAS CHATTING %n!!
+damn mousepad slipped again
+!rolls eye...nice shot!
+mouse broke.. I need a new one
+mouse sensitivity messed up, I need to restart, brb!
+Dead AGAIN? Sheesh, I'm gonna go play pool!
+argh! dropped pepsi on kboard
+!n1, %n
+!ns, %n
+!doh
+!DOH!!
+%n .. leet as usual :P
+
+[bot_endgame]
+!I win!
+!gg
+!gg
+!gg
+!GG
+!GG
+!GG
+losers hahaha
+hahaha

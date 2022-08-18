@@ -1,0 +1,6 @@
+game "Half-Life"
+startmap "c0a0"
+trainmap "t0a0"
+mpentity "info_player_deathmatch"
+gamedll "addons\metamod\dlls\metamod.dll"
+gamedll_linux "dlls/hl_i386.so"
