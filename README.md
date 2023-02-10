@@ -24,7 +24,7 @@ ______________________________________________________________
 
 - Classic Training
 
-  - Start/Reset training : Start a timer, give you infinite health, weapons and ammo and counts your kills
+  	- Start/Reset training : Start a timer, give you infinite health, weapons and ammo and counts your kills
 	- Start/Reset training - no ammo : Start a timer, give you infinite health and counts your kills
 	- Stop training : (start training needed) Stop the timer and display statistics: kills/min
 	- Add more bots : Open a menu to let you add a moving bot by level
@@ -37,7 +37,7 @@ ______________________________________________________________
 	- WallHack <ON/OFF> : Option to activate Wall Hack to see bots through walls
 
 - Spawn Training
- - Add a moving bot : Open a menu to let you add a moving bot by level
+ 	- Add a moving bot : Open a menu to let you add a moving bot by level
 	- Add a stationary : Add a not moving bot 
 	- Remove bots : Remove all bots
 	- Show Spawn Info <ON/OFF> : Option to display in chat the location number on spawn
@@ -47,21 +47,21 @@ ______________________________________________________________
 	- WallHack <ON/OFF> : Option to activate Wall Hack to see bots through walls
 
 - Training maps
-	- [AIM-training] teylo_training_facility : complex trainings for gauss, bouncing, 9mmAR, shotgun, satchel, RPG, 357 etc. by [TheSpacePirate] (https://twhl.info/user/view/8002)
-	- [AIM-training] aimtrainingcenter : training for gauss, 9mmAR, shotgun, crossbow, RPG by [DuchNeo] (https://www.17buddies.rocks/17b2/View/User/29793/x/index.html)
+	- [AIM-training] teylo_training_facility : complex trainings for gauss, bouncing, 9mmAR, shotgun, satchel, RPG, 357 etc. by [TheSpacePirate](https://twhl.info/user/view/8002)
+	- [AIM-training] aimtrainingcenter : training for gauss, 9mmAR, shotgun, crossbow, RPG by [DuchNeo](https://www.17buddies.rocks/17b2/View/User/29793/x/index.html)
 	- [AIM-training] aim_training : big box map perfect for free style
 	- [AIM-training] hlaim_train : classic map from Counter Strike
-	- [AIM-training] fire_training_facility : map for trackick aiming by [Fire] (https://steamcommunity.com/id/therealfire/)
-	- [AIM-training] fire_reflex_training : map for reflex training and muscle memory training by [Fire] (https://steamcommunity.com/id/therealfire/)
-	- [AIM-training] ptk_aimtracking2 : egon map for aim tracking by [Dr.Know] (https://steamcommunity.com/id/DocKnow/)
-	- [AIM-training] fire_horizontal : good map for horizontal strafe training by [Fire] (https://steamcommunity.com/id/therealfire/)
+	- [AIM-training] fire_training_facility : map for trackick aiming by [Fire](https://steamcommunity.com/id/therealfire/)
+	- [AIM-training] fire_reflex_training : map for reflex training and muscle memory training by [Fire](https://steamcommunity.com/id/therealfire/)
+	- [AIM-training] ptk_aimtracking2 : egon map for aim tracking by [Dr.Know](https://steamcommunity.com/id/DocKnow/)
+	- [AIM-training] fire_horizontal : good map for horizontal strafe training by [Fire](https://steamcommunity.com/id/therealfire/)
 	- [BHOP-training] test_ro : bhop map to test your movement by [@teylo](https://github.com/andreiseverin)
 	- [BHOP-training] test_ro2 : bhop map to test your movement by [@teylo](https://github.com/andreiseverin)
 
 ## Thanks to
 
-- [zorba(Kemal)] (https://steamcommunity.com/profiles/76561198067779539/) for continuosly plugin help
-- [Fire] (https://steamcommunity.com/id/therealfire/) for server and plugin testing
-- [SexAndOutrage] (https://steamcommunity.com/profiles/76561198970820303/) for plugin testing
-- [@ScriptedSnark](https://github.com/ScriptedSnark)
+- [zorba(Kemal)](https://steamcommunity.com/profiles/76561198067779539/) for continuosly plugin help
+- [Fire](https://steamcommunity.com/id/therealfire/) for server and plugin testing
+- [SexAndOutrage](https://steamcommunity.com/profiles/76561198970820303/) for plugin testing
+- [@ScriptedSnark](https://github.com/ScriptedSnark) for his MTBot Lite plugin
 - And thanks everyone for testing this mod and providing feedback
