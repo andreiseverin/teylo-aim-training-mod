@@ -1,9 +1,10 @@
-# Half-Life and Adrenaline training mod
+## Half-Life and Adrenaline training mod
  
  ![Half-Life aim training mod by teylo](https://repository-images.githubusercontent.com/526348219/fd14e64b-f785-4642-bdab-d4c3d55f0436)
 ______________________________________________________________
 
-The mod is currently set-up for Half-Life.
+## Video
+[![Watch the video](https://i.imgur.com/SQgojdb.jpg)](https://youtu.be/nYgqZ-DnQ9s)
 
 1. If you want to use it for Half-Life AG mini, you have to modify the following:
 - Go to teylo aim training mod\addons\amxmodx\configs
