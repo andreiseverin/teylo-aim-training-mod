@@ -1,5 +1,6 @@
-# teylo aim training mod
- A Half-Life and Adrenaline training mod 
+# Half-Life and Adrenaline training mod
+ 
+ ![Half-Life aim training mod by teylo](https://repository-images.githubusercontent.com/526348219/fd14e64b-f785-4642-bdab-d4c3d55f0436)
 ______________________________________________________________
 
 The mod is currently set-up for Half-Life.
