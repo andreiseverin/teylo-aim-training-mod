@@ -1,10 +1,10 @@
 /*
 *	PLUGIN NAME 	: HLAim Training for AG MINI
-*	VERSION		: v1.0
+*	VERSION		: v1.1.0
 *	AUTHOR		: teylo
 *
 *
-*  	Copyright (C) 2022, teylo 
+*  	Copyright (C) 2023, teylo 
 *	
 *
 */
@@ -21,7 +21,7 @@
 
 new PLUGIN[] = "HL Aim Training";
 new AUTHOR[] = "teylo";
-new VERSION[] = "3.0";
+new VERSION[] = "1.1.0";
  
  
 #define SECONDS 4.0	// time to disapear (seconds) 
@@ -43,6 +43,7 @@ new g_iFrags[ 33 ];
 
 new g_gRoom = 0;
 new g_gRoom_aim = 0;
+new g_gHorizontalRoom=0;
 new bool:g_Freeze = false;
 new gVerif =  0;
 new bool:g_StartAmmo;
@@ -58,9 +59,48 @@ new players[32], inum, player
 // blue fade
 new blueFade = 0
 
+// weaponbox
+new weaponbox =0;
+
 // hl aim training central room
 new const g_fOrigin_hlaim[][ 3 ] = {
 {-511 , 0 , -196}
+};
+
+
+// Fire horizontal room
+new const g_botOrigin_horizontal[][ 3 ] = {
+{740,704,71},
+{740,192,71},
+{740,-255,71},
+{740,-697,71},
+{740,-694,199},
+{740,-147,199},
+{740,254,199},
+{740,585,199},
+{740,583,319},
+{740,147,319},
+{740,-196,319},
+{740,-608,319},
+{740,-702,451},
+{740,-48,451},
+{740,284,451},
+{740,678,451},
+{740,610,575},
+{740,62,575},
+{740,-337,575},
+{740,-698,575},
+{740,-652,703},
+{740,230,703},
+{740,-638,835},
+{740,-75,835},
+{740,481,835}
+};
+
+new const g_botOrigin_horizontal2[][ 3 ] = {
+{-2201,2439,-1479},
+{-2431,2435,-1479},
+{-2313,2446,-1479}
 };
 
 // Fire Reflex + vertical training map
@@ -407,6 +447,64 @@ static const _HLW_to_rgAmmoIdx[] =
 };
 new bool: msgMenu [33] = true;
 
+/* Top15  */
+new gAuthScore[33][33];
+new gNameScore[33][33];
+new gKillScore[15];
+new gScorePath[128];
+
+new bool:g_chStarted[33];
+new cv_ctime;
+
+// WallHack area
+
+new const SpritesPath[] = "sprites/hl_train/hl.spr";
+new SpritePathIndex[33];
+new EntitiesOwner;
+
+new MaxPlayers;
+const MaxSlots = 32;
+new bool:g_CheckWh[MaxSlots+1];
+
+enum Individual
+{
+	Host,
+	Viewed
+}
+
+enum _:Vector
+{
+	X,
+	Y,
+	Z
+}
+
+enum OriginOffset
+{
+	FrameSide,
+	FrameTop,
+	FrameBottom,
+}
+
+enum FramePoint
+{
+	TopLeft,
+	TopRight,
+	BottomLeft,
+	BottomRight
+}
+
+new Float:OriginOffsets[OriginOffset] =  {_:13.0,_:25.0,_:36.0};
+
+new Float:ScaleMultiplier = 0.013;
+new Float:ScaleLower = 0.005;
+
+new Float:SomeNonZeroValue = 1.0;
+
+new ForwardAddToFullPack;
+
+new bool:whMessage[33];
+
 public plugin_init() 
 {
 
@@ -434,7 +532,7 @@ public plugin_init()
 	RegisterHam(Ham_Killed, "player", "fwdKilledPost");
 	RegisterHam(Ham_TakeDamage, "player", "BotTakeDamage");
 	register_clcmd("agstart","AutoVote");
-	//register_message(get_user_msgid("Vote"), "AutoVote");
+	register_message(get_user_msgid("Vote"), "AutoVote");
 
 	g_iMaxPlayers = get_maxplayers();
 	create_fake_timer();
@@ -445,6 +543,33 @@ public plugin_init()
 	set_task(1.0,"remove_gib");
 	set_task(SECONDS,"clear_weaponbox",_,_,_,"b");
 	set_task(2.0,"timeControl",_,_,_,"b");
+
+	// top 15 area
+	register_clcmd("say /ctop15", "show_top15");
+	format(gScorePath,sizeof(gScorePath),"addons/amxmodx/data/train_top15/");
+	cv_ctime = register_cvar("train_ctime","1.5"); //mins
+	read_top15();
+
+
+}
+
+public plugin_precache()
+{
+	if(!dir_exists(gScorePath))
+		mkdir(gScorePath)
+
+	SpritePathIndex[0] = precache_model(SpritesPath)
+}
+
+public plugin_cfg()
+{
+	EntitiesOwner = create_entity("info_target")
+	
+	MaxPlayers = get_maxplayers()
+	
+	for(new id=1;id<=MaxPlayers;id++)
+		createSprite(id,EntitiesOwner)	
+	
 }
 
 // if 10 seconds untill the end of the map display statistics
@@ -486,6 +611,7 @@ public ShowMenuS(id)
 	menu_additem(menus, "Classic Training", "1", 0); 
 	menu_additem(menus, "Spawn Training", "2", 0); 
 	menu_additem(menus, "Training Maps", "3", 0); 
+	menu_additem(menus, "Start a challange !", "4", 0); 
 
 
 	menu_setprop(menus, MPROP_EXIT, MEXIT_ALL);
@@ -509,6 +635,8 @@ public ShowMenu(id)
 	menu_additem(menu, "Freeze bots", "7", 0); 
 	menu_additem(menu, "Unfreeze bots", "8", 0); 
 	menu_additem(menu, "Killing Blue Fade <ON/OFF>", "9", 0);
+	menu_additem(menu, "Drop weaponbox <ON/OFF>", "10", 0);
+	menu_additem(menu, "WallHack <ON/OFF>", "11", 0);
 
 	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
 	//menu_setprop(menu, MPROP_NOCOLORS, 1);
@@ -543,6 +671,8 @@ public ShowMenu3(id)
 		menu_additem(menu3, "Show Spawn Info <ON/OFF>", "4", 0);
 		menu_additem(menu3, "Show Damage info <ON/OFF>", "5", 0);
 		menu_additem(menu3, "Killing Blue Fade <ON/OFF>", "6", 0);
+		menu_additem(menu3, "Drop weaponbox <ON/OFF>", "7", 0);
+		menu_additem(menu3, "WallHack <ON/OFF>", "8", 0);
 		menu_setprop(menu3, MPROP_EXIT, MEXIT_ALL);
 		
 		menu_display(id, menu3, 0);
@@ -560,8 +690,9 @@ public ShowMenu4(id)
 	menu_additem(menu, "[AIM-training] fire_training_facility", "5", 0); 
 	menu_additem(menu, "[AIM-training] fire_reflex_training", "6", 0); 
 	menu_additem(menu, "[AIM-training] ptk_aimtracking2", "7", 0);
-	menu_additem(menu, "[BHOP-training] test_ro", "8", 0); 
-	menu_additem(menu, "[BHOP-training] test_ro2", "9", 0); 
+	menu_additem(menu, "[AIM-training] fire_horizontal", "8", 0);
+	menu_additem(menu, "[BHOP-training] test_ro", "9", 0); 
+	menu_additem(menu, "[BHOP-training] test_ro2", "10", 0); 
 
 	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
 	//menu_setprop(menu, MPROP_NOCOLORS, 1);
@@ -609,6 +740,11 @@ public mh_MyMenuS(id, menu, item)
 			menu_destroy(menu);
 			ShowMenu4(id);
 		}
+		case 4: 
+		{
+			challangeTrain(id);
+		}	
+
 	}
 	menu_display(id, menu, 0);
 	return PLUGIN_HANDLED;
@@ -634,12 +770,12 @@ public mh_MyMenu(id, menu, item)
 		case 1: 
 		{ 
 			g_StartAmmo = true;
-			clcmdStartTimer(id);
+			classicTrain(id);
 		}
 		case 2: 
 		{
 			g_StartAmmo = false;
-			clcmdStartTimer(id);
+			classicTrain(id);
 		}
 		case 3: 
 		{
@@ -657,7 +793,7 @@ public mh_MyMenu(id, menu, item)
 		}
 		case 6: 
 		{ 
-			boost_hp(id);
+			switch_hp(id);
 		}
 		case 7: 
 		{ 
@@ -676,6 +812,14 @@ public mh_MyMenu(id, menu, item)
 		{
 			switch_fade(id);
 		}	
+		case 10: 
+		{
+			switch_weaponbox(id);
+		}
+		case 11: 
+		{
+			switch_wh(id);
+		}		
 	}
 	menu_display(id, menu, 0);
 	return PLUGIN_HANDLED;
@@ -793,7 +937,15 @@ public mh_MyMenu3(id, menu, item)
 		case 6: 
 		{
 			switch_fade(id);
+		}
+		case 7: 
+		{
+			switch_weaponbox(id);
 		}	
+		case 8: 
+		{
+			switch_wh(id);
+		}		
 	}
 	menu_display(id, menu, 0);
 	return PLUGIN_HANDLED;
@@ -860,13 +1012,19 @@ public mh_MyMenu4(id, menu, item)
 			server_cmd("amx_votemap ptk_aimtracking2")
 			menu_destroy(menu);
 		}
-		case 8: 
+		case 8:
+		{
+			client_print(id, print_chat, "^^8[Classic Training] You have selected the aim training map ^^1fire_horizontal")
+			server_cmd("amx_votemap fire_horizontal")
+			menu_destroy(menu);
+		}
+		case 9: 
 		{ 
 			client_print(id, print_chat, "^^8[Classic Training] You have selected the bhop training map ^^1test_ro")
 			menu_destroy(menu);
 			server_cmd("amx_votemap test_ro")
 		}
-		case 9: 
+		case 10: 
 		{ 
 			client_print(id, print_chat, "^^8[Classic Training] You have selected the bhop training map ^^1test_ro2")
 			menu_destroy(menu);
@@ -936,6 +1094,25 @@ public fwd_Room(iEnt, id)
 	// get the func button entity by name 
 	new szTarget[32];
 	pev(iEnt, pev_target, szTarget, 31);
+
+
+	// FIRE HORIZONTAL CONVEYOR ROOM
+	// room 1
+	if ((equal(szTarget, "con")) && !is_user_bot(id) )
+		{	
+			g_gHorizontalRoom = 1;
+			killBots();
+			cmdFreeze()
+			client_print ( 0 , print_chat , "^^8[AIM Training Map] ^^1Room 1 ^^8- ^^2Horizontal Training ^^8- Good luck!");
+		}
+	//room 2
+	if ((equal(szTarget, "roomt")) && !is_user_bot(id) )
+		{	
+			g_gHorizontalRoom = 2;
+			killBots();
+			cmdUnfreeze()
+			client_print ( 0 , print_chat , "^^8[AIM Training Map] ^^1Room 2 ^^8- ^^2Horizontal Strafes ^^8- Good luck!");
+		}
 
 	// FIRE REFLEX + VERTICAL AIM TRAINING 
 	//room 1
@@ -1114,6 +1291,7 @@ public client_disconnected(id)
 		gConnexion[id]=0;
 	}
 	
+	whMessage[id]= false;
 	clcmdResetTimer(id);
 	remove_task(id);
 	//menu_cancel(id);
@@ -1123,6 +1301,15 @@ public client_disconnected(id)
 
 public playerSpawn(id)
 {
+
+	// Teleport to center in hlaim_training map
+	new map_name[10];
+	get_mapname(map_name, charsmax(map_name));
+	if ( containi(map_name, "hlaim" ) != -1 && !is_user_bot(id)) 
+	{
+		client_print ( 0 , print_chat , "^^8[AIM Training Map] ^^1Center Room ^^8- ^^2Training all weapons ^^8- Good luck!");
+		set_user_origin(id,g_fOrigin_hlaim[0]);
+	}
 
 	// spawn training bot respawn 
 	MTBot_AGRespawn(id)
@@ -1137,6 +1324,36 @@ public playerSpawn(id)
 			hl_set_user_armor(id,200);
 		}
 	
+	// FIRE Horizontal training map /////////////////////////////////////
+	// room 1 - conveyors
+	if((g_gHorizontalRoom == 1) && (is_user_bot(id)))
+	{
+		cmdFreeze()
+		new num1=random_num(0,24);
+		set_user_origin(id,g_botOrigin_horizontal[num1]);
+		if (is_user_alive(id)) 
+		{
+			hl_strip_user_weapons(id);
+			set_user_maxspeed(id, 1.0);
+			set_user_gravity(id,10.0);
+		}
+	}
+	// room 2 - strafes
+	if((g_gHorizontalRoom == 2) && (is_user_bot(id)))
+	{
+		new num1=random_num(0,2);
+		set_user_origin(id,g_botOrigin_horizontal2[num1]);
+		if (is_user_alive(id)) 
+		{
+			give_item( id, "weapon_gauss" );
+			give_item( id, "ammo_gaussclip" );	
+			give_item( id, "ammo_gaussclip" );	
+			give_item( id, "ammo_gaussclip" );	
+			give_item( id, "ammo_gaussclip" );	
+			hl_set_user_longjump(id,true);
+		}
+	}
+
 	// FIRE Reflex map //////////////////////////////////////////////////
 
 	// Reflex room
@@ -1153,21 +1370,21 @@ public playerSpawn(id)
 		}
 
 	// Floor room
-		if((g_gReflexRoom == 2) && (is_user_bot(id)))
-		{
+	if((g_gReflexRoom == 2) && (is_user_bot(id)))
+	{
 		new num1=random_num(0,49);
 		set_user_origin(id,g_botOrigin_vertical1[num1]);
-		}
+	}
 	// Vertical control room 
-		if((g_gReflexRoom == 3) && (is_user_bot(id)))
-		{
+	if((g_gReflexRoom == 3) && (is_user_bot(id)))
+	{
 		new num1=random_num(0,6);
 		set_user_origin(id,g_botOrigin_vertical2[num1]);
-		}
+	}
 
 	// FIRE Map /////////////////////////////////////////////////
 	if((g_gFireRoom == 1) && (is_user_bot(id)))
-		{
+	{
 		new num1=random_num(0,6);
 		set_user_origin(id,g_FireOrigin_room1[num1]);
 		if (is_user_alive(id)) {
@@ -1176,7 +1393,7 @@ public playerSpawn(id)
 			hl_set_ammo( id,HLW_MP5,250); 
 			hl_set_ammo( id,HLW_SHOTGUN,250); 
 			}
-		}
+	}
 	
 	//room 2 - bot bouncing
 	if((g_gFireRoom == 2) && (is_user_bot(id)))
@@ -1329,39 +1546,103 @@ public create_fake_timer()
 	set_pev(iEnt, pev_nextthink, get_gametime() + 1.0);
 }
 
-public clcmdStartTimer(id)
+
+public classicTrain(id)
+
+{
+	// verify if challange started
+	if (g_chStarted[id] )
+	{	
+		client_print(id, print_chat, "^^8[Challange Training] ^^1You can't start another after starting a challange!");
+		return PLUGIN_HANDLED;
+	}
+
+	if( !is_user_alive( id ) )
+	{  
+		client_print( id, print_chat, "^^8[Classic Training] ^^1You can't use this command while you are dead." );  
+		return PLUGIN_HANDLED; 
+	} 
+	client_print(id, print_chat, "^^8[Classic Training] ^^2You have selected Start/Reset training");
+	// start timer
+	clcmdStartTimer(id);
+	return PLUGIN_HANDLED;
+}
+
+public challangeTrain(id)
 {
 	
-	give_weapons(id);
-	if(!g_bStarted[id])
-		g_bStarted[id] = true;
-		
-	g_fStart[id] = get_gametime();
+	if( !is_user_alive( id ) )
+	{  
+		client_print( id, print_chat, "^^8[Challange Training] ^^1You can't use this command while you are dead." );  
+		return PLUGIN_HANDLED; 
+	}
 
-	// Teleport to center in hlaim_training map
-	new map_name[10];
-	get_mapname(map_name, charsmax(map_name));
-	if ( containi(map_name, "hlaim" ) != -1 ) 
+	if (g_chStarted[id])
 	{
-		client_print ( 0 , print_chat , "^^8[AIM Training Map] ^^1Center Room ^^8- ^^2Training all weapons ^^8- Good luck!");
-		set_user_origin(id,g_fOrigin_hlaim[0]);
+		client_print( id, print_chat, "^^8[Challange Training] ^^1You already started a challange." );  
+		return PLUGIN_HANDLED; 
+	}
+
+	if (g_bStarted[id])
+	{
+		client_print( id, print_chat, "^^8[Challange Training] ^^1You already started a training." );  
+		return PLUGIN_HANDLED; 
+	}
+
+	g_chStarted[id] = true;
+
+	client_print(id, print_chat, "^^8[Half-Life Aim Training] ^^2You have started a challenge! Do the most score/min !");
+	// remove all bots for the challange
+	MTBot_Remove(id)
+	// add a level 1 bot
+	server_cmd("jk_botti addbot ^"green^" ^"^" ^"1^"");
+	// start timer + all weapons
+	g_StartAmmo = true;
+	clcmdStartTimer(id);
+	// stop timer after x seconds set in the cvar 
+	set_task(get_pcvar_float(cv_ctime)*60,"clcmdResetTimer",id);
+	return PLUGIN_HANDLED;
+}
+
+public clcmdStartTimer(id)
+{
+
+	if (is_user_alive(id))
+	{
+		give_weapons(id);
+
+		if(!g_bStarted[id])
+			g_bStarted[id] = true;
+		
+		g_fStart[id] = get_gametime();
 	}
 }
 
 
 public clcmdResetTimer(id)
 {
+
+	// Classic train timer 
 	if (g_bStarted[id] == true)
 	{
-	clientPrintColor(id, "^^8[Training statistics] You did ^^1%d ^^8kills in  ^^1%.1f ^^8sec. Kills per minute: ^^1%.1f ^^8.",g_iFrags[ id ], get_gametime() - g_fStart[id],g_iFrags[id]/((get_gametime() - g_fStart[id])/60));
-	set_hudmessage(255, 255, 255, -1.0, -1.0, 0, 6.0, 12.0);
-	show_hudmessage(id, "%d kills ^nTime: %.1f ", g_iFrags[ id ], get_gametime() - g_fStart[id]);
-	g_bStarted[id] = false;
-	g_fStart[id] = 0.0;
-	arrayset( g_iFrags, 0, sizeof( g_iFrags ) );
+		// Challange part
+		if (g_chStarted[id] == true)
+		{
+			client_print(id, print_chat, "^^8[Challange Training] Challange finished! Use ^^2/ctop15 ^^8to see the best players !");
+			check_top15(id);
+			clientPrintColor(id, "^^8[Challange Training] You did ^^1%d ^^8kills in  ^^1%.1f ^^8sec. Kills per minute: ^^1%.1f ^^8.",g_iFrags[ id ], get_gametime() - g_fStart[id],g_iFrags[id]/(get_pcvar_float(cv_ctime)));
+			g_chStarted[id] = false;	
+		} else {
+			clientPrintColor(id, "^^8[Training statistics] You did ^^1%d ^^8kills in  ^^1%.1f ^^8sec. Kills per minute: ^^1%.1f ^^8.",g_iFrags[ id ], get_gametime() - g_fStart[id],g_iFrags[id]/((get_gametime() - g_fStart[id])/60)); 
+		}
+		g_bStarted[id] = false;
+		g_fStart[id] = 0.0;
+		arrayset( g_iFrags, 0, sizeof( g_iFrags ) );
 	} else {
 		clientPrintColor(id, "^^8[Training statistics] ^^1You did not started a training");
 	}
+
+
 }
 
 public fwd_Think(ent)
@@ -1379,8 +1660,16 @@ public fwd_Think(ent)
 	{
 		if(is_user_connected(i) && g_bStarted[i] && g_fStart[i] > 0.0)
 		{
-			set_hudmessage(255, 255, 255, -1.0, 0.8, 0, 6.0, 0.1, 0.1, 0.1, 1);
-			show_hudmessage(i, "Time: %.1f sec. ^nKill: %d", (get_gametime() - g_fStart[i]), g_iFrags[ i ]);
+			if (g_chStarted[i])
+			{
+				set_hudmessage(255, 255, 255, -1.0, 0.8, 0, 6.0, 0.1, 0.1, 0.1, 1);
+				show_hudmessage(i, "Time: %.1f/%.1f sec. ^nKill: %d", (get_gametime() - g_fStart[i]), (get_pcvar_float(cv_ctime)*60),g_iFrags[ i ]);
+			} 
+			else 
+			{
+				set_hudmessage(255, 255, 255, -1.0, 0.8, 0, 6.0, 0.1, 0.1, 0.1, 1);
+				show_hudmessage(i, "Time: %.1f sec. ^nKill: %d", (get_gametime() - g_fStart[i]), g_iFrags[ i ]);
+			}
 		}
 	}
 	set_pev(ent, pev_nextthink, get_gametime() + 0.1);
@@ -1415,14 +1704,14 @@ public clientPrintColor( id, String[ ], any:... )
 
 public Event_DeathMsg( ) 
 {
-    	new iKiller = read_data( 1 );
-    	new iVictim = read_data( 2 );
-    
-    	if( iVictim != iKiller ) {
+		new iKiller = read_data( 1 );
+		new iVictim = read_data( 2 );
+	
+		if( iVictim != iKiller ) {
 		if(g_bStarted[iKiller])
 		{
-       		 	g_iFrags[ iKiller ]++; 
-    		}	
+	   		 	g_iFrags[ iKiller ]++; 
+			}	
 	}
 
 }
@@ -1522,11 +1811,16 @@ public remove_gib()
 
 public clear_weaponbox()
 {
+	if(weaponbox == 1)
+		return PLUGIN_HANDLED;
+
 	// silah kutularini yok et
 	new ent = 0;
 	while ((ent = find_ent_by_class(ent, "weaponbox"))) {
-		hl_remove_wbox(ent);
+		//hl_remove_wbox(ent);
+		engfunc( EngFunc_RemoveEntity, ent );
 	}	
+	return PLUGIN_HANDLED;
 }
 
 public Fw_FmPlayerPreThinkPost(id)
@@ -1631,8 +1925,8 @@ public MTBot_BotDeath(id) {
 
 public MTBot_AGRespawn(id)
 {
-    get_user_info(id, "*bot", is_bot, 255)
-    if (str_to_num(is_bot) != 0) {
+	get_user_info(id, "*bot", is_bot, 255)
+	if (str_to_num(is_bot) != 0) {
 		engfunc(EngFunc_DropToFloor, id)
 	}
 }
@@ -1678,32 +1972,23 @@ public MTBot_Remove(id)
 
 public AutoVote(id)
 {
-	new num_bot,num_players
 	get_players(players, inum)
 	
-
 	for(new i; i < inum; i++) {
 		player = players[i]
 
 		if(!is_user_connected(players[i]))
-            return PLUGIN_HANDLED;
+			return PLUGIN_HANDLED;
 
 		if (is_user_bot(player) ){
-		    //engclient_cmd(players[i], "yes")
-			num_bot++
+			engclient_cmd(players[i], "yes")
 		}  
 	}
 
-	if (num_bot >= 1)
-	{
-		server_cmd("agstart");
-	}
-
-
-	return PLUGIN_CONTINUE;
+	return PLUGIN_HANDLED
 }
 
-public boost_hp(id)
+public switch_hp(id)
 {	
 	if(g_BoostBotHP==0)
 	{
@@ -1755,6 +2040,34 @@ public switch_fade(id)
 	return PLUGIN_CONTINUE;
 }
 
+public switch_weaponbox(id)
+{
+	if(weaponbox==0)
+	{
+		weaponbox=1;
+		client_print(id,print_chat,"^^8[Classic Training] ^^2Weaponbox system activated.");
+	}else{
+		weaponbox=0;
+		client_print(id,print_chat,"^^8[Classic Training] ^^2Weaponbox system deactivated.");
+	}	
+	return PLUGIN_CONTINUE;
+}
+
+public switch_wh(id)
+{
+	if(!whMessage[id])
+	{
+		whMessage[id]=true;
+		handleTurnWallHackOn(id)
+		client_print(id,print_chat,"^^8[Training] ^^2WallHack system activated.");
+	}else{
+		whMessage[id]=false;
+		handleTurnWallHackOff(id)
+		client_print(id,print_chat,"^^8[Training] ^^1WallHack system deactivated.");
+	}	
+	return PLUGIN_CONTINUE;
+}
+
 public get_bot_spawn(id)
 {
 	new NameBot[32]
@@ -1791,3 +2104,390 @@ public fwdKilledPost(victim, attacker, corpse)
 		message_end()
 		return HAM_IGNORED;
 }
+
+
+///////////////// TOP 15 AREA //////////////////////
+// Challange mode
+
+
+public check_top15(id) 
+{
+
+	new name[32],authid[32]
+	get_user_name( id, name, 31 )
+	get_user_authid( id, authid ,31 )
+
+	new iPlayerScore, iHighScore
+	iPlayerScore = g_iFrags[id]
+	if (gKillScore[14] == 9999999)
+	{ 
+		iHighScore = 0
+	} 
+	else 
+	{	
+		iHighScore = gKillScore[14]
+	}
+
+	if( iPlayerScore > iHighScore) {
+		for( new i = 0; i < 15; i++ ) {
+			if (gKillScore[i] == 9999999)
+			{ 
+				iHighScore = 0
+			} 
+			else 
+			{	
+					iHighScore = gKillScore[i];
+			}
+			
+			if( iPlayerScore > iHighScore) 
+			{
+				new pos = i
+				while( !equal( gAuthScore[pos], authid ) && pos < 14 )
+					pos++
+				for( new j = pos; j > i; j-- ) 
+				{
+					format( gAuthScore[j], 32, gAuthScore[j-1] )
+					format( gNameScore[j], 32, gNameScore[j-1] )
+					gKillScore[j] = gKillScore[j-1]
+				}
+			
+				format( gAuthScore[i], 32, authid )
+				format( gNameScore[i], 32, name )
+				gKillScore[i] = g_iFrags[id]
+
+				save_top15()
+				return
+			}
+			if( equal( gAuthScore[i], authid ) )
+				return
+		}	
+	}
+	server_cmd("echo Check done!")
+	return
+}
+
+
+public save_top15() 
+{
+
+	new cMap[32]
+	get_mapname(cMap, 31)
+
+	new cScoreFile[128]	
+	format(cScoreFile, 127, "%s%s.txt", gScorePath, cMap)
+
+	if( file_exists(cScoreFile) )	
+		delete_file(cScoreFile)
+	
+	for( new i = 0; i < 15; i++ ) {
+		if( gKillScore[i] == 0)
+			return PLUGIN_HANDLED
+	
+		new TextToSave[1024],sNameScore[33]
+		format(sNameScore, 127, "^"%s^"", gNameScore[i])
+		format(TextToSave,sizeof(TextToSave),"%31s %31s %9d",gAuthScore[i],sNameScore,gKillScore[i])
+		write_file(cScoreFile, TextToSave)
+	}
+	server_cmd("echo Save done!")
+	return PLUGIN_HANDLED;
+}
+
+public read_top15() 
+{
+	for( new i = 0 ; i < 15; i++) {
+		gAuthScore[i] = "X"
+		gNameScore[i] = "X"
+		gKillScore[i] = 9999999
+	}
+	new cMap[32]
+	get_mapname(cMap, 31)
+
+	new cScoreFile[128]	
+	format(cScoreFile, 127, "%s%s.txt", gScorePath, cMap)
+
+	if(file_exists(cScoreFile) == 1) { 
+		new line, stxtsize 
+		new data[192] 
+		new tAuth[32],tName[32],tKills[10]
+		for(line = 0; line < 15; line++) {
+			read_file(cScoreFile,line,data,191,stxtsize)
+			parse(data,tAuth,31,tName,31,tKills,9)
+			format(gAuthScore[line],sizeof(gAuthScore),tAuth)
+			format(gNameScore[line],sizeof(gNameScore),tName)
+			gKillScore[line] = str_to_num(tKills)
+		}
+	}
+	else
+	{
+		server_cmd("echo [TOP Train] File created: ^"%s^"!!!",cScoreFile)
+		log_message("[TOP Train] File created: ^"%s^"!!!",cScoreFile)
+	}
+
+	/*
+	for( new i = 0 ; i < 15; ++i) 
+	{
+		server_cmd("echo [TOP Test %d] AuthScore: ^"%s^"",i,gAuthScore[i])
+		server_cmd("echo [TOP Test %d] NameScore: ^"%s^"",i,gNameScore[i])
+		server_cmd("echo [TOP Test %d] KillScore: ^"%.1f^"",i,float(gKillScore[i])/(get_pcvar_float(cv_ctime)*1.0))
+	}*/
+
+	return PLUGIN_HANDLED;
+}
+
+public show_top15( id ) 
+{
+	
+	new buffer[2048] 
+	new line[256]
+	new cMap[32]
+	get_mapname(cMap, 31)
+	
+	new len = format( buffer, 2047, "" )
+	len += format( buffer[len], 2047-len, "%5s  %31s  %5s ( %s )^n","Rank","Nick","Score/Min",cMap)
+
+	for(new i = 0; i < 15; i++) {		
+		if( gKillScore[i] == 9999999)
+			format(line, 255, "%5d  %31s  %5s^n", (i+1), "-------", "-----" )
+		else
+		{
+			// remove AG colored name format
+			replace_string(gNameScore[i], 32, "^^0", "");
+			replace_string(gNameScore[i], 32, "^^1", "");
+			replace_string(gNameScore[i], 32, "^^2", "");
+			replace_string(gNameScore[i], 32, "^^3", "");
+			replace_string(gNameScore[i], 32, "^^4", "");
+			replace_string(gNameScore[i], 32, "^^5", "");
+			replace_string(gNameScore[i], 32, "^^6", "");
+			replace_string(gNameScore[i], 32, "^^7", "");
+			replace_string(gNameScore[i], 32, "^^8", "");
+			replace_string(gNameScore[i], 32, "^^9", ""); 			
+			format(line, 255, "%5d  %31s  %.1f^n", (i+1), gNameScore[i], float(gKillScore[i])/(get_pcvar_float(cv_ctime)*1.0))
+		}
+		len += format( buffer[len], 2047-len, line )
+	}
+	
+	format(line, 255, "" )
+	len += format( buffer[len], 2047-len, line )
+		
+	show_motd( id, buffer, "Train Top15")	
+	
+	return PLUGIN_HANDLED
+}
+
+///////////////// WALLHACK AREA //////////////////////
+// 
+
+public createSprite(aiment,owner)
+{
+	new sprite = create_entity("info_target")
+	
+	assert is_valid_ent(sprite);
+	
+	entity_set_edict(sprite,EV_ENT_aiment,aiment)	
+	set_pev(sprite,pev_movetype,MOVETYPE_FOLLOW)
+	
+	entity_set_model(sprite,SpritesPath)
+	
+	set_pev(sprite,pev_owner,owner)
+
+	set_pev(sprite,pev_solid,SOLID_NOT)
+	
+	fm_set_rendering(sprite,.render=kRenderTransAlpha,.amount=0)	
+}
+
+public addToFullPackPost(es, e, ent, host, hostflags, player, pSet)
+{
+
+	if((1<=host<=MaxPlayers) && is_valid_ent(ent) && g_CheckWh[host])
+
+	{		
+		if(pev(ent,pev_owner) == EntitiesOwner)
+		{
+			if(engfunc(EngFunc_CheckVisibility,ent,pSet))
+			{
+				new spectated = host
+				
+				new aiment = pev(ent,pev_aiment)
+				
+				if((spectated != aiment) && is_user_alive(aiment) )
+				{
+					static ID[Individual]
+		
+					ID[Host] = spectated
+					ID[Viewed] = ent
+					
+					static Float:origin[Individual][Vector]
+					
+					entity_get_vector(ID[Host],EV_VEC_origin,origin[Host])
+					get_es(es,ES_Origin,origin[Viewed])
+					
+					static Float:diff[Vector]
+					static Float:diffAngles[Vector]
+					
+					xs_vec_sub(origin[Viewed],origin[Host],diff)			
+					xs_vec_normalize(diff,diff)         
+					
+					vector_to_angle(diff,diffAngles)
+					
+					diffAngles[0] = -diffAngles[0];
+					
+					static Float:framePoints[FramePoint][Vector]
+					
+					calculateFramePoints(origin[Viewed],framePoints,diffAngles)			
+					
+					static Float:eyes[Vector]
+					
+					xs_vec_copy(origin[Host],eyes)
+					
+					static Float:viewOfs[Vector]			
+					entity_get_vector(ID[Host],EV_VEC_view_ofs,viewOfs);
+					xs_vec_add(eyes,viewOfs,eyes);
+					
+					static Float:framePointsTraced[FramePoint][Vector]
+					
+					static FramePoint:closerFramePoint
+					
+					if(traceEyesFrame(ID[Host],eyes,framePoints,framePointsTraced,closerFramePoint))
+					{
+						static Float:otherPointInThePlane[Vector]
+						static Float:anotherPointInThePlane[Vector]
+						
+						static Float:sideVector[Vector]
+						static Float:topBottomVector[Vector]
+						
+						angle_vector(diffAngles,ANGLEVECTOR_UP,topBottomVector)
+						angle_vector(diffAngles,ANGLEVECTOR_RIGHT,sideVector)
+						
+						xs_vec_mul_scalar(sideVector,SomeNonZeroValue,otherPointInThePlane)
+						xs_vec_mul_scalar(topBottomVector,SomeNonZeroValue,anotherPointInThePlane)	
+						
+						xs_vec_add(otherPointInThePlane,framePointsTraced[closerFramePoint],otherPointInThePlane)
+						xs_vec_add(anotherPointInThePlane,framePointsTraced[closerFramePoint],anotherPointInThePlane)
+						
+						static Float:plane[4]
+						xs_plane_3p(plane,framePointsTraced[closerFramePoint],otherPointInThePlane,anotherPointInThePlane)
+						
+						moveToPlane(plane,eyes,framePointsTraced,closerFramePoint);
+						
+						static Float:middle[Vector]
+						
+						static Float:half = 2.0
+						
+						xs_vec_add(framePointsTraced[TopLeft],framePointsTraced[BottomRight],middle)
+						xs_vec_div_scalar(middle,half,middle)
+						
+						new Float:scale = ScaleMultiplier * vector_distance(framePointsTraced[TopLeft],framePointsTraced[TopRight])
+						
+						if(scale < ScaleLower)
+							scale = ScaleLower;
+						
+						set_es(es,ES_AimEnt,0)
+						set_es(es,ES_MoveType,MOVETYPE_NONE)
+						set_es(es,ES_ModelIndex,SpritePathIndex[0])
+						set_es(es,ES_Scale,scale)
+						set_es(es,ES_Angles,diffAngles)
+						set_es(es,ES_Origin,middle)
+						set_es(es,ES_RenderMode,kRenderNormal)
+					}
+				}
+			}
+		}
+	}
+}
+
+public calculateFramePoints(Float:origin[Vector],Float:framePoints[FramePoint][Vector],Float:perpendicularAngles[Vector])
+{
+	new Float:sideVector[Vector]
+	new Float:topBottomVector[Vector]
+	
+	angle_vector(perpendicularAngles,ANGLEVECTOR_UP,topBottomVector)
+	angle_vector(perpendicularAngles,ANGLEVECTOR_RIGHT,sideVector)
+	
+	new Float:sideDislocation[Vector]
+	new Float:bottomDislocation[Vector]
+	new Float:topDislocation[Vector]
+	
+	xs_vec_mul_scalar(sideVector,Float:OriginOffsets[FrameSide],sideDislocation)
+	xs_vec_mul_scalar(topBottomVector,Float:OriginOffsets[FrameTop],topDislocation)	
+	xs_vec_mul_scalar(topBottomVector,Float:OriginOffsets[FrameBottom],bottomDislocation)
+	
+	xs_vec_copy(topDislocation,framePoints[TopLeft])
+	
+	xs_vec_add(framePoints[TopLeft],sideDislocation,framePoints[TopRight])
+	xs_vec_sub(framePoints[TopLeft],sideDislocation,framePoints[TopLeft])
+	
+	xs_vec_neg(bottomDislocation,framePoints[BottomLeft])
+	
+	xs_vec_add(framePoints[BottomLeft],sideDislocation,framePoints[BottomRight])
+	xs_vec_sub(framePoints[BottomLeft],sideDislocation,framePoints[BottomLeft])
+	
+	for(new FramePoint:i = TopLeft; i <= BottomRight; i++)
+		xs_vec_add(origin,framePoints[i],framePoints[i])
+	
+}
+
+public traceEyesFrame(id,Float:eyes[Vector],Float:framePoints[FramePoint][Vector],Float:framePointsTraced[FramePoint][Vector],&FramePoint:closerFramePoint)
+{
+	new Float:smallFraction = 1.0
+	
+	for(new FramePoint:i = TopLeft; i <= BottomRight; i++)
+	{
+		new trace;
+		engfunc(EngFunc_TraceLine,eyes,framePoints[i],IGNORE_GLASS,id,trace)
+		
+		new Float:fraction
+		get_tr2(trace, TR_flFraction,fraction);
+		
+		if(fraction == 1.0)
+		{
+			return false;
+		}
+		else
+		{
+			if(fraction < smallFraction)
+			{
+				smallFraction = fraction
+				closerFramePoint = i;
+			}
+			
+			get_tr2(trace,TR_EndPos,framePointsTraced[i]);
+		}
+	}
+	
+	return true;
+}
+
+public moveToPlane(Float:plane[4],Float:eyes[Vector],Float:framePointsTraced[FramePoint][Vector],FramePoint:alreadyInPlane)
+{
+	new Float:direction[Vector]
+	
+	for(new FramePoint:i=TopLeft;i<alreadyInPlane;i++)
+	{
+		xs_vec_sub(eyes,framePointsTraced[i],direction)
+		xs_plane_rayintersect(plane,framePointsTraced[i],direction,framePointsTraced[i])
+	}
+	
+	for(new FramePoint:i=alreadyInPlane+FramePoint:1;i<=BottomRight;i++)
+	{
+		xs_vec_sub(eyes,framePointsTraced[i],direction)
+		xs_plane_rayintersect(plane,framePointsTraced[i],direction,framePointsTraced[i])
+	}
+}	
+
+
+public handleTurnWallHackOn(id)
+{	
+	g_CheckWh[id] = true
+	ForwardAddToFullPack = register_forward(FM_AddToFullPack,"addToFullPackPost",1)
+
+}
+
+public handleTurnWallHackOff(id)
+{
+	g_CheckWh[id] = false
+	unregister_forward(FM_AddToFullPack,ForwardAddToFullPack,1)
+}
+
+
+
+
