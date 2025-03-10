@@ -1,6 +1,6 @@
 /*
 *	PLUGIN NAME 	: HLAim Training for AG MINI
-*	VERSION		: v1.1.0
+*	VERSION		: v1.2.0
 *	AUTHOR		: teylo
 *
 *
@@ -21,54 +21,119 @@
 
 new PLUGIN[] = "HL Aim Training";
 new AUTHOR[] = "teylo";
-new VERSION[] = "1.1.0";
+new VERSION[] = "1.2.0";
  
  
-#define SECONDS 4.0	// time to disapear (seconds) 
-new gConnexion[33];
+// ================================================================================== //
+// ============================ DEFINE VARIABLES AREA =============================== //
+// ================================================================================== //
 
 
-
+// In HL stocks, it is called with the prefix HL_, but since it is the same as in 1.6, I don't include it xD
+#if !defined MAX_ITEM_TYPES
+    #define MAX_ITEM_TYPES 6
+#endif
+#define SECONDS 4.0					// time to disapear (seconds) 
+#define TASKID        81732619124   // task id for the menu timer
 #define fm_create_entity(%1) engfunc(EngFunc_CreateNamedEntity, engfunc(EngFunc_AllocString, %1))
 
-new const g_szClassname[] = "_task";
+// ================================================================================== //
+// ============================ GLOBAL VARIABLES AREA =============================== //
+// ================================================================================== //
 
-new bool:g_bStarted[33];
+new g_gRoom 			= 0;			// room number for Noel's teylo_training_facility map
+new g_gFireRoom 		= 0;			// room number for Fire's map
+new g_gRoom_aim 		= 0;			// room number for aim_training map
+new g_gReflexRoom 		= 0;			// room number for fire_reflex map
+new g_gHorizontalRoom	= 0;			// room number for fire_horizontal map
+new const g_szClassname[] = "_task";	// classname for the fake timer
+new gConnexion[33];						// variable to store the connexion status of each player
+new bool:g_bStarted[33];				// variable to store the start status of each player
+new Float:g_fStart[33];					// variable to store the start time of each player
+new g_iMaxPlayers;						// variable to store the maxplayers
+new g_iFrags[ 33 ];						// variable to store the frags of the players
+new bool:g_Freeze 		= false;		// variable to store the freeze status of the bots
+new gSetPrevExitMenu 	= 0;			// variable to store the previous menu
+new bool:g_StartAmmo;					// variable to store the start ammo status
+new g_BoostBotHP 		= 0;			// variable to store the boost bot HP status
+new bool:firstSpawn[33];				// variable to store the first spawn status of the players
+new spawnMessage		= 0;			// variable to store the spawn message status
+new dmgMessage			= 0;			// variable to store the damage message status
+new origin_resp[3],origin_fix[3];		// variable to store the origin of the players
+new is_bot[32];							// variable to store the bot status of the players
+new players[32], inum, player;			// variable to store the players and the number of players
+new blueFade 			= 0;			// variable to store the blue fade status
+new weaponbox 			= 0;			// variable to store the weaponbox status
+new gBotCounter 		= 0; 			// variable to store the number of bots
+new bool: msgMenu [33];					// variable to store the menu message status
 
-new Float:g_fStart[33];
+/* Top15  */
+new gAuthScore[33][33];					// variable to store the auth score of the players
+new gNameScore[33][33];					// variable to store the name score of the players
+new gKillScore[15];						// variable to store the kill score of the players
+new gScorePath[128];					// variable to store the score file path
 
-new g_iMaxPlayers;
+new bool:g_chStarted[33];				// variable to store the challange status of each player
+new cv_ctime;							// variable to store the challange time cvar
 
-new g_iFrags[ 33 ];
+// WallHack area
+new const SpritesPath[] = "sprites/hl_train/hl.spr"; // path to the sprite used for the wallhack
+new SpritePathIndex[33];							 // variable to store the sprite path index
+new EntitiesOwner;									 // variable to store the owner of the entities
 
-new g_gRoom = 0;
-new g_gRoom_aim = 0;
-new g_gHorizontalRoom=0;
-new bool:g_Freeze = false;
-new gVerif =  0;
-new bool:g_StartAmmo;
-new g_BoostBotHP=0;
+new MaxPlayers;									 	 // variable to store the maxplayers
+const MaxSlots = 32;							     // variable to store the maxslots
+new bool:g_CheckWh[MaxSlots+1];					     // variable to store the wallhack status of the players
 
-//spawn training variables
-new spawnMessage=0
-new dmgMessage=0
-new origin_resp[3],origin_fix[3]
-new is_bot[32]
-new players[32], inum, player
+enum Individual										// enum for the individual wallhack status
+{
+	Host,
+	Viewed
+}
 
-// blue fade
-new blueFade = 0
+enum _:Vector	
+{
+	X,
+	Y,
+	Z
+}
 
-// weaponbox
-new weaponbox =0;
+enum OriginOffset 
+{
+	FrameSide,
+	FrameTop,
+	FrameBottom,
+}
 
-// hl aim training central room
+enum FramePoint
+{
+	TopLeft,
+	TopRight,
+	BottomLeft,
+	BottomRight
+}
+
+new Float:OriginOffsets[OriginOffset] =  {_:13.0,_:25.0,_:36.0};
+
+new Float:ScaleMultiplier = 0.013;			 	 // variable to store the scale multiplier
+new Float:ScaleLower = 0.005;				 	 // variable to store the scale lower
+
+new Float:SomeNonZeroValue = 1.0;				 // variable to store the non zero value
+
+new ForwardAddToFullPack;						 // variable to store the forward for the wallhack
+
+new bool:whMessage[33];							 // variable to store the wallhack message status
+
+// ================================================================================== //
+// ============================== TRAINING MAPS AREA ================================ //
+// ================================================================================== //
+
+// Map: hl_aim_training central room coordinates
 new const g_fOrigin_hlaim[][ 3 ] = {
 {-511 , 0 , -196}
 };
 
-
-// Fire horizontal room
+// Fire_horizontal room coordinates for bots spawn
 new const g_botOrigin_horizontal[][ 3 ] = {
 {740,704,71},
 {740,192,71},
@@ -97,13 +162,14 @@ new const g_botOrigin_horizontal[][ 3 ] = {
 {740,481,835}
 };
 
+// Fire_horizontal room 2 coordinates for bots spawn
 new const g_botOrigin_horizontal2[][ 3 ] = {
 {-2201,2439,-1479},
 {-2431,2435,-1479},
 {-2313,2446,-1479}
 };
 
-// Fire Reflex + vertical training map
+// Fire Reflex + vertical training map coordinates for bots spawn
 new const g_botOrigin_vertical1[][ 3 ] = {
 {200,202,530},
 {206,110,530},
@@ -157,6 +223,7 @@ new const g_botOrigin_vertical1[][ 3 ] = {
 {-208,200,-448}
 };
 
+// Fire Reflex training map, vertical room2 coordinates for bots spawn
 new const g_botOrigin_vertical2[][ 3 ] = {
 {-1780,-1094,-960},
 {-1772,-1478,-960},
@@ -167,7 +234,7 @@ new const g_botOrigin_vertical2[][ 3 ] = {
 {-1764,-1159,-960}
 };
 
-// Noel map rooms 
+// Noel map : teylo_training_facility - room 1 coordinates for bots spawn
 new const g_fOrigin_room1[][ 3 ] = {
 {431, 32, -456},
 {592, -325, -445},
@@ -188,8 +255,8 @@ new const g_fOrigin_room1[][ 3 ] = {
 {1332, 754, -200},
 {1548, 289, -456},
 {1602, 370, -200}
-	
 };
+// Noel map : teylo_training_facility - room 2 coordinates for bots spawn
 new const g_fOrigin_room2[][ 3 ] = {
 {-2528, 908, -2120},
 {-2225, 1042, -2120},
@@ -210,25 +277,27 @@ new const g_fOrigin_room2[][ 3 ] = {
 {-1650, 566, -2120},
 {-2249, 466, -2120}
 };
+// Noel map : teylo_training_facility - room 3 coordinates for bots spawn
 new const g_fOrigin_room3[][ 3 ] = {
-{-1960, -1640, -1992},
-{-1959, -1930, -1992},
-{-1855, -1441, -1992},
-{-1604, -1684, -1992},
-{-1568, -2428, -1992},
-{-1796, -2313, -1992},
-{-2356, -2322, -1992},
-{-2806, -2306, -1992},
-{-3023, -2267, -1960},
-{-2918, -1579, -1992},
-{-2744, -1704, -1992},
-{-2302, -1532, -1992},
-{-2306, -3063, -1992},
-{-1658, -3002, -1973},
-{-2841, -2835, -1992},
-{-2299, -2615, -1960},
-{-2295, -1980, -1992}
+{-1960, -1640, -1900},
+{-1959, -1930, -1900},
+{-1855, -1441, -1900},
+{-1604, -1684, -1900},
+{-1568, -2428, -1900},
+{-1796, -2313, -1900},
+{-2356, -2322, -1900},
+{-2806, -2306, -1900},
+{-3023, -2267, -1900},
+{-2918, -1579, -1900},
+{-2744, -1704, -1900},
+{-2302, -1532, -1900},
+{-2306, -3063, -1900},
+{-1658, -3002, -1900},
+{-2841, -2835, -1900},
+{-2299, -2615, -1900},
+{-2295, -1980, -1900}
 };
+// Noel map : teylo_training_facility - room 4 coordinates for bots spawn
 new const g_fOrigin_room4[][ 3 ] = {
 {879, -2848, -1672},
 {520, -2942, -1672},
@@ -244,6 +313,7 @@ new const g_fOrigin_room4[][ 3 ] = {
 {-90, -2553, -1736},
 {708, -2998, -1672}
 };
+// Noel map : teylo_training_facility - room 5 coordinates for bots spawn
 new const g_fOrigin_room5[][ 3 ] = {
 {2116, 3183, -982},
 {2289, 3060, -1000},
@@ -259,6 +329,7 @@ new const g_fOrigin_room5[][ 3 ] = {
 {2031, 2011, -1000},
 {1991, 1156, -968}
 };
+// Noel map : teylo_training_facility - room 6 coordinates for bots spawn
 new const g_fOrigin_room6[][ 3 ] = {
 {2265, -2955, -1464},
 {2717, -2610, -1464},
@@ -280,7 +351,7 @@ new const g_fOrigin_room6[][ 3 ] = {
 {2102, -1769, -1464}
 };
 
-// aimtraining center rooms
+// Dutch Neo map : aimtraining center room 1 coordinates for bots spawn
 new const g_fOrigin_aim_room1[][ 3 ] = {
 {1630, 1269, 55},
 {1462, 1508, 55},
@@ -303,6 +374,7 @@ new const g_fOrigin_aim_room1[][ 3 ] = {
 {1729, 1047, 55},
 {1359,  989, 55}
 };
+// Dutch Neo map : aimtraining center room 2 coordinates for bots spawn
 new const g_fOrigin_aim_room2[][ 3 ] = {
 {2269, -1179, 55},
 {2264, -1479, 55},
@@ -325,6 +397,7 @@ new const g_fOrigin_aim_room2[][ 3 ] = {
 {2204, -1760, 55},
 {1810, -1869, 55}
 };
+// Dutch Neo map : aimtraining center room 3 coordinates for bots spawn
 new const g_fOrigin_aim_room3[][ 3 ] = {
 {-1301, -1428, 63},
 {-1197, -2439, 63},
@@ -345,6 +418,7 @@ new const g_fOrigin_aim_room3[][ 3 ] = {
 {-2400, -1652, 63},
 {-1944, -2269, 63}
 };
+// Dutch Neo map : aimtraining center room 4 coordinates for bots spawn
 new const g_fOrigin_aim_room4[][ 3 ] = {
 {-1519, 1113, 55},
 {-1112, 1547, 55},
@@ -368,7 +442,7 @@ new const g_fOrigin_aim_room4[][ 3 ] = {
 {-1571, 1831, 55}
 };
 
-// Fire map rooms 
+// Fire map : fire_training_facility room 1 coordinates for bots spawn
 new const g_FireOrigin_room1[][ 3 ] = {
 {1757,2480,330},
 {1803,2485,329},
@@ -387,8 +461,9 @@ new const g_FireOrigin_room1[][ 3 ] = {
 {2635,2485,329},
 {2695,2483,329},
 {2761,2482,330}
-	
 };
+
+// Fire map : fire_training_facility room 2 coordinates for bots spawn
 new const g_FireOrigin_room2[][ 3 ] = {
 {73,340,55},
 {58,153,55},
@@ -417,15 +492,10 @@ new const g_FireOrigin_room2[][ 3 ] = {
 {-427,-327,55}
 };
 
-new g_gFireRoom;
-new g_gReflexRoom;
+// ================================================================================== //
+// ============================ HL WEAPON OFFSET CLASS ============================== //
+// ================================================================================== //
 
-new menu2,menu3;
-
-new gBotCounter = 0;
-new playerConnect[ 33];
-
-// =========== WEAPON OFFSET CLASS ============ //
 static const _HLW_to_rgAmmoIdx[] =
 {
 	0, 	// bos
@@ -445,72 +515,13 @@ static const _HLW_to_rgAmmoIdx[] =
 	10, // satchel
 	12  // snark
 };
-new bool: msgMenu [33] = true;
-
-/* Top15  */
-new gAuthScore[33][33];
-new gNameScore[33][33];
-new gKillScore[15];
-new gScorePath[128];
-
-new bool:g_chStarted[33];
-new cv_ctime;
-
-// WallHack area
-
-new const SpritesPath[] = "sprites/hl_train/hl.spr";
-new SpritePathIndex[33];
-new EntitiesOwner;
-
-new MaxPlayers;
-const MaxSlots = 32;
-new bool:g_CheckWh[MaxSlots+1];
-
-enum Individual
-{
-	Host,
-	Viewed
-}
-
-enum _:Vector
-{
-	X,
-	Y,
-	Z
-}
-
-enum OriginOffset
-{
-	FrameSide,
-	FrameTop,
-	FrameBottom,
-}
-
-enum FramePoint
-{
-	TopLeft,
-	TopRight,
-	BottomLeft,
-	BottomRight
-}
-
-new Float:OriginOffsets[OriginOffset] =  {_:13.0,_:25.0,_:36.0};
-
-new Float:ScaleMultiplier = 0.013;
-new Float:ScaleLower = 0.005;
-
-new Float:SomeNonZeroValue = 1.0;
-
-new ForwardAddToFullPack;
-
-new bool:whMessage[33];
 
 public plugin_init() 
 {
 
 	register_plugin(
-		PLUGIN,		//: HL Aim Training
-		VERSION,	//: 1.0
+		PLUGIN,		//: HLAim Training for AG MINI
+		VERSION,	//: v1.2.0
 		AUTHOR		//: teylo
 	);
 
@@ -572,6 +583,480 @@ public plugin_cfg()
 	
 }
 
+public ShowMenuMain(id)
+{
+	if (msgMenu[id])
+	{
+	client_print ( id , print_chat , "^^8[|-^^5RT^^8-| ^^5teylo^^8 AIM Training Mod] Use ^^1NUMPPAD keys ^^8for the training menu");
+	msgMenu[id] = false;
+	}
+	new menu = menu_create("Teylo AIM Training", "fw_MenuHandler");
+
+	menu_additem(menu, "Classic Training", "a1", 0); 
+	menu_additem(menu, "Spawn Training", "a2", 0); 
+	menu_additem(menu, "Challange Training <ON/OFF>", "a3", 0); 
+	menu_additem(menu, "Training Maps", "a4", 0); 
+	menu_additem(menu, "Global settings", "a5", 0);
+
+
+	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
+
+	menu_display(id, menu, 0);
+	return PLUGIN_HANDLED;
+}
+
+
+public ShowMenuClassic(id)
+{
+	new menu = menu_create("Classic Training Menu", "fw_MenuHandler");
+
+	menu_additem(menu, "Start/Reset Training", "c1", 0); 
+	menu_additem(menu, "Start/Reset Training - No Ammo", "c2", 0);
+	menu_additem(menu, "Stop training", "c3", 0); 
+	menu_additem(menu, "Add BOT Menu", "c4", 0); 
+	menu_additem(menu, "Add DUMMY BOT ( on aim)", "c5", 0);
+	menu_additem(menu, "Kick BOT Menu", "c6", 0); 
+	menu_additem(menu, "Global Settings", "c7", 0);
+
+	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
+
+	menu_display(id, menu, 0);
+	return PLUGIN_HANDLED;
+}
+
+public ShowMenuSpawn(id)
+{
+	new menu = menu_create("Spawn Training Menu", "fw_MenuHandler");
+
+	menu_additem(menu, "Start/Reset Training", "s1", 0); 
+	menu_additem(menu, "Add BOT Menu", "s2", 0);
+	menu_additem(menu, "Add Stationary BOT (fast spawn)", "s3", 0);
+	menu_additem(menu, "Kick BOT Menu", "s4", 0); 
+	menu_additem(menu, "Show Spawn Info <ON/OFF>", "s5", 0);
+	menu_additem(menu, "Show Damage info <ON/OFF>", "s6", 0);
+	menu_additem(menu, "Global Settings", "s7", 0);
+
+	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);	
+
+	menu_display(id, menu, 0);
+	return PLUGIN_HANDLED;
+}
+
+public ShowMenuBot(id)
+{
+	new menu = menu_create("Add BOT Menu", "fw_MenuHandler");
+
+	menu_additem(menu, "Add BOT Level 1 (highest)", "b1", 0);
+	menu_additem(menu, "Add BOT Level 2", "b2", 0);
+	menu_additem(menu, "Add BOT Level 3", "b3", 0);
+	menu_additem(menu, "Add BOT Level 4", "b4", 0);
+	menu_additem(menu, "Add BOT Level 5 (lowest)", "b5", 0);
+
+	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
+
+	menu_display(id, menu, 0);
+	return PLUGIN_HANDLED;
+}
+
+
+public ShowMenuMap(id)
+{
+	new menu = menu_create("Choose the training map", "fw_MenuHandler");
+
+	menu_additem(menu, "[AIM-training] teylo_training_facility", "p1", 0); 
+	menu_additem(menu, "[AIM-training] aimtrainingcenter", "p2", 0); 
+	menu_additem(menu, "[AIM-training] aim_training", "p3", 0); 
+	menu_additem(menu, "[AIM-training] hlaim_train", "p4", 0); 
+	menu_additem(menu, "[AIM-training] fire_training_facility", "p5", 0); 
+	menu_additem(menu, "[AIM-training] fire_reflex_training", "p6", 0); 
+	menu_additem(menu, "[AIM-training] ptk_aimtracking2", "p7", 0);
+	menu_additem(menu, "[AIM-training] fire_horizontal", "p8", 0);
+	menu_additem(menu, "[BHOP-training] test_ro", "p9", 0); 
+	menu_additem(menu, "[BHOP-training] test_ro2", "p10", 0); 
+
+	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
+
+	menu_display(id, menu, 0);
+	return PLUGIN_HANDLED;
+}
+
+
+public ShowMenuSettings(id)
+{
+	new menu = menu_create("Global Settings Menu", "fw_MenuHandler");
+
+	menu_additem(menu, "WallHack <ON/OFF>", "g1", 0);
+	menu_additem(menu, "Freeze bots <ON/OFF>", "g2", 0); 
+	menu_additem(menu, "Show Spawn Info <ON/OFF>", "g3", 0);
+	menu_additem(menu, "Show Damage info <ON/OFF>", "g4", 0);
+	menu_additem(menu, "Boost bots HP - 200/200 <ON/OFF>", "g5", 0);
+	menu_additem(menu, "Killing Blue Fade <ON/OFF>", "g6", 0);
+	menu_additem(menu, "Drop weaponbox <ON/OFF>", "g7", 0);	
+
+
+	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
+
+	menu_display(id, menu, 0);
+	return PLUGIN_HANDLED;
+
+}
+
+public ShowMenuKick(id)
+{
+	new menu = menu_create("Kick BOT Menu", "fw_MenuHandler");
+
+	menu_additem(menu, "Kick a BOT", "k1", 0); 
+	menu_additem(menu, "Kick All BOTS", "k2", 0);	
+
+	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
+
+	menu_display(id, menu, 0);
+	return PLUGIN_HANDLED;
+}
+
+public fw_MenuHandler(id,menu,item)
+{
+	if (!is_user_connected(id))
+		return PLUGIN_HANDLED;
+
+	if(item == MENU_EXIT)
+	{
+		menu_cancel(id);		
+		// Show the right menu on exit : Main, Classic, Spawn training or exit
+		switch(gSetPrevExitMenu)
+		{
+			case 0:{
+				ShowMenuMain(id);		// Show the main menu on exit
+				gSetPrevExitMenu = 9;	// Reset the previous menu to be able to exit from the main menu
+			}
+			case 1:{
+				ShowMenuClassic(id);	// Show the classic menu on exit (used for the bot, kick bot and global settings menus) 
+				gSetPrevExitMenu = 0;	// Reset the previous menu to be able to exit to the main menu 
+			}
+			case 2:{		
+				ShowMenuSpawn(id);		// Show the spawn menu on exit (used for the bot, kick bot and global settings menus)
+				gSetPrevExitMenu = 0;	// Reset the previous menu to be able to exit to the main menu
+			}
+		}
+		return PLUGIN_HANDLED;
+	}
+	
+	new data[6],name[64]
+	new access,callback
+	menu_item_getinfo(menu,item,access,data,5,name,63,callback)
+
+	
+	new key = str_to_num(data[1])
+	
+	switch(data[0]){
+		case 'a':{
+			// Check the last menu
+			gSetPrevExitMenu = 0;		
+			switch(key){		
+				case 1: 
+				{ 
+					// Classic Training
+					client_print(id, print_chat, "^^8[Half-Life Aim Training] ^^2You have selected Classic Training");
+					menu_destroy(menu);		// Destroy current menu  
+					ShowMenuClassic(id);	// Show the next menu
+				}
+				case 2: 
+				{
+					// Spawn Training
+					client_print(id, print_chat, "^^8[Half-Life Aim Training] ^^2You have selected Spawn Training");
+					menu_destroy(menu); 	// Destroy current menu
+					ShowMenuSpawn(id);		// Show the next menu
+				}
+				case 3: 
+				{
+					// Challange Training
+					switch_challange(id);	// Start the challange training with ammo, 1 bot and a timer of 90 seconds <ON/OFF>
+					ShowMenuMain(id);		// Reshow the menu
+				}
+				case 4: 
+				{
+					// Training Maps
+					client_print(id, print_chat, "^^8[Half-Life Aim Training] ^^2You have selected Training Maps");
+					menu_destroy(menu);		// Destroy current menu
+					ShowMenuMap(id);		// Show the next menu		
+				}
+				case 5: 
+				{
+					// Global Settings
+					client_print(id, print_chat, "^^8[Half-Life Aim Training] ^^2You have selected Global settings");	
+					menu_destroy(menu);		// Destroy current menu
+					ShowMenuSettings(id);	// Show the next menu
+				}							
+			}
+		}
+		case 'c':{
+			// Check the last menu
+			gSetPrevExitMenu = 1;					
+			switch(key){
+				case 1: 
+				{ 
+					// Start/Reset Training
+					g_StartAmmo = true;
+					classicTrain(id);		// Start the training with ammo
+					ShowMenuClassic(id);	// Reshow the menu
+				}
+				case 2: 
+				{
+					// Start/Reset Training - No Ammo
+					g_StartAmmo = false;
+					classicTrain(id);		// Start the training without ammo
+					ShowMenuClassic(id);	// Reshow the menu
+				}
+				case 3: 
+				{
+					// Stop training
+					clcmdResetTimer(id);	// Reset the timer
+					ShowMenuClassic(id);	// Reshow the menu
+				}
+				case 4: 
+				{
+					// Add BOT Menu
+					client_print(id, print_chat, "^^8[Classic Training] ^^2You have selected Add BOT Menu");				
+					menu_destroy(menu);		// Destroy current menu 
+					ShowMenuBot(id);		// Show the next menu
+				}
+				case 5: 
+				{ 
+					// Add DUMMY BOT ( on aim) - message on make dummy function			
+					Add_MTBot_Dummy(id);	// Make a dummy bot on the aim							
+					ShowMenuClassic(id);	// Reshow the menu	
+				}
+				case 6: 
+				{ 
+					// Kick BOT Menu
+					client_print(id, print_chat, "^^8[Classic Training] ^^2You have selected Kick BOT Menu");
+					menu_destroy(menu);		// Destroy current menu
+					ShowMenuKick(id);		// Show the next menu
+				}
+				case 7: 
+				{
+					// Global Settings
+					client_print(id, print_chat, "^^8[Classic Training] ^^5You have selected Global settings");
+					menu_destroy(menu);		// Destroy current menu
+					ShowMenuSettings(id);	// Show the next menu
+				}
+			}								
+		}
+		case 's': {
+			// Check the last menu
+			gSetPrevExitMenu = 2;				
+			switch(key){				
+				case 1: 
+				{ 
+					// Start/Reset Training
+					g_StartAmmo = true;		
+					classicTrain(id);		// Start the training with ammo
+					ShowMenuSpawn(id);		// Reshow the menu
+				}
+				case 2:
+				{
+					// Add BOT Menu
+					client_print(id, print_chat, "^^8[Spawn Training] ^^2You have selected Add BOT Menu");
+					menu_destroy(menu)		// Destroy current menu
+					ShowMenuBot(id)			// Show the next menu
+				}
+				case 3: 
+				{ 
+					// Add Stationary BOT (fast spawn)
+					client_print(id, print_chat, "^^8[Spawn Training] ^^2You added a stationary bot");
+					Add_MTBot(id);			// Add a stationary bot
+				}		
+				case 4: 
+				{ 
+					// Kick BOT Menu
+					client_print(id, print_chat, "^^8[Spawn Training] ^^2You have selected Kick BOT Menu");
+					menu_destroy(menu);		// Destroy current menu
+					ShowMenuKick(id);		// Show the next menu
+				}			
+				case 5: 
+				{
+					// Show Spawn Info <ON/OFF>
+					switch_spawn()			// Switch the spawn info
+				}
+				case 6: 
+				{
+					// Show Damage info <ON/OFF>
+					switch_dmg();			// Switch the damage info
+				}	
+				case 7: 
+				{
+					// Global Settings
+					client_print(id, print_chat, "^^8[Spawn Training] ^^5You have selected Global settings");
+					menu_destroy(menu);		// Destroy current menu
+					ShowMenuSettings(id);	// Show the next menu
+				}
+			}		
+		}		
+		case 'b': {	
+			switch(key){
+				case 1: 
+				{
+					Add_JKbotti(id, 1);		// Add a level 1 bot
+					ShowMenuBot(id);		// Reshow the menu
+				}
+				case 2: 
+				{
+					Add_JKbotti(id, 2);		// Add a level 2 bot
+					ShowMenuBot(id);		// Reshow the menu
+				}
+				case 3: 
+				{
+					Add_JKbotti(id, 3);		// Add a level 3 bot
+					ShowMenuBot(id);		// Reshow the menu
+				}
+				case 4: 
+				{
+					Add_JKbotti(id, 4);		// Add a level 4 bot
+					ShowMenuBot(id);		// Reshow the menu
+				}
+				case 5: 
+				{
+					Add_JKbotti(id, 5);		// Add a level 5 bot
+					ShowMenuBot(id);		// Reshow the menu
+				}
+			}				
+		}
+		case 'p':{		
+			switch(key){
+				case 1:  Vote_Map(id, "teylo_training_facility");
+				case 2:  Vote_Map(id, "aimtrainingcenter");
+				case 3:  Vote_Map(id, "aim_training");
+				case 4:  Vote_Map(id, "hlaim_train");	
+				case 5:  Vote_Map(id, "fire_training_facility");
+				case 6:  Vote_Map(id, "fire_reflex_training");
+				case 7:  Vote_Map(id, "ptk_aimtracking2");
+				case 8:  Vote_Map(id, "fire_horizontal");
+				case 9:  Vote_Map(id, "test_ro");
+				case 10: Vote_Map(id, "test_ro2");	
+			}
+			menu_destroy(menu);
+		}
+		case 'g':{		
+			switch(key){
+				case 1: {
+					switch_wh(id);			// Switch the wallhack <ON/OFF>
+					ShowMenuSettings(id);	// Reshow the menu
+				} 
+				case 2: {
+					switch_freezebots();	// Switch the freezing bots <ON/OFF>
+					ShowMenuSettings(id);	// Reshow the menu
+				}
+				case 3: {
+					switch_spawn();			// Switch the spawn info <ON/OFF>
+					ShowMenuSettings(id);	// Reshow the menu
+				}
+				case 4: {
+					switch_dmg();			// Switch the damage info <ON/OFF>
+					ShowMenuSettings(id);	// Reshow the menu
+				}
+				case 5: {
+					switch_hp();			// Switch the boost bots HP 200/200 <ON/OFF>
+					ShowMenuSettings(id);	// Reshow the menu
+				}
+				case 6: {
+					switch_fade();			// Switch the killing blue fade <ON/OFF>
+					ShowMenuSettings(id);	// Reshow the menu
+				}
+				case 7: {
+					switch_weaponbox();		// Switch the drop weaponbox <ON/OFF>
+					ShowMenuSettings(id);	// Reshow the menu
+				}
+			}		
+
+		}
+		case 'k':{
+			switch(key){
+				case 1: {
+					kickBot(id);			// Kick a BOT
+					ShowMenuKick(id);		// Reshow the menu
+				}				
+				case 2: {
+					KickAllBots(id);		// Kick all the bots
+					ShowMenuKick(id);		// Reshow the menu
+				}
+			}
+		}
+	}
+	
+	return PLUGIN_CONTINUE
+}
+
+public Add_JKbotti(id, iLevel)
+{
+	new num, players[32],playername[32];							// Declare the variables
+	server_cmd("jk_botti addbot ^"green^" ^"^" ^"%d^"", iLevel);	// Add a bot with the level iLevel
+	gBotCounter +=1;												// Increment the bot counter
+	get_user_name(id, playername, charsmax(playername));			// Get the player name
+	get_players(players,num); 										// Get the number of players
+
+	// Print the message for everyone
+	client_print(id, print_chat, "^^8[AIM Training] ^^2%s ^^8added a Level ^^1%d ^^8bot. There are ^^1%d ^^8bots added to the server", playername, iLevel, num);
+}
+
+public Vote_Map(id, map[32])
+{
+	// Check if the map name contain "test" in the name to display a dynamic message for bhop or aim training
+	if ( containi(map, "test" ) != -1 ) 
+		client_print(id, print_chat, "^^8[BHOP-TRAINING] You have selected the bhop training map: ^^1%s", map);
+	else
+		client_print(id, print_chat, "^^8[AIM-TRAINING] You have selected the aim training map: ^^1%s", map);
+
+	server_cmd("amx_votemap %s", map);
+
+}
+
+public kickBot(id)
+{
+
+	new playername[32];
+	get_user_name(id, playername, charsmax(playername));	// Get the player name
+	get_players(players, inum);								// Get the number of players
+	
+	for(new i; i < inum; i++) {
+		player = players[i]
+		if (is_user_bot(player) ){
+			server_cmd("kick #%i", get_user_userid(players[i]));	// Kick the bot
+			gBotCounter -=1;										// Decrement the bot counter
+			client_cmd(0, "spk vox/destroyed.wav");					// Play the sound
+			client_print(id, print_chat, "^^8[AIM Training] ^^1%s ^^8kicked a bot. There are ^^1%d ^^8bots added to the server", playername, gBotCounter);
+			i = inum;												// Exit the loop
+		}
+	}
+
+}
+
+public KickAllBots(id)
+{
+	new playername[32];
+	new bool:botsKicked = false;
+	get_user_name(id, playername, charsmax(playername));		// get caller name
+	get_players(players, inum);									// get all players a
+	
+	
+	for(new i; i < inum; i++) {
+		player = players[i];
+		if (is_user_bot(player) ){
+			server_cmd("kick #%i", get_user_userid(players[i]));// kick the bot
+			botsKicked = true;
+		}
+	}
+	if (botsKicked)
+	{
+		client_print(id, print_chat, "^^8[AIM-Training] ^^1%s ^^8removed all bots.", playername);	// Display global message
+		gBotCounter = 0;											// reset bot counter
+		client_cmd(0, "spk vox/destroyed.wav");						// play sound
+	}
+	else
+		client_print(id, print_chat, "^^8[AIM-Training] ^^1There are no bots to remove.");	// Display private message
+			
+}
+
+
 // if 10 seconds untill the end of the map display statistics
 public timeControl(id)
 {
@@ -597,461 +1082,6 @@ stock hl_set_ammo(client, weapon, ammo)
 	if (weapon <= HLW_CROWBAR)
 		return;
 	set_ent_data(client, "CBasePlayer", "m_rgAmmo", ammo, _HLW_to_rgAmmoIdx[weapon]);
-}
-
-public ShowMenuS(id)
-{
-	if (msgMenu[id])
-	{
-		client_print ( id , print_chat , "^^8[|-^^5RT^^8-| ^^5teylo^^8 AIM Training Mod] Use ^^1NUMPPAD keys ^^8for the training menu");
-		msgMenu[id] = false;
-	}
-	new menus = menu_create("Teylo AIM Training", "mh_MyMenuS");
-
-	menu_additem(menus, "Classic Training", "1", 0); 
-	menu_additem(menus, "Spawn Training", "2", 0); 
-	menu_additem(menus, "Training Maps", "3", 0); 
-	menu_additem(menus, "Start a challange !", "4", 0); 
-
-
-	menu_setprop(menus, MPROP_EXIT, MEXIT_ALL);
-	//menu_setprop(menu, MPROP_NOCOLORS, 1);
-	//menu_setprop(menu, MPROP_NUMBER_COLOR, "\w");
-
-	menu_display(id, menus, 0);
-	return PLUGIN_HANDLED;
-}
-
-public ShowMenu(id)
-{
-	new menu = menu_create("Classic Training Menu", "mh_MyMenu");
-
-	menu_additem(menu, "Start/Reset training", "1", 0); 
-	menu_additem(menu, "Start/Reset training - no ammo", "2", 0);
-	menu_additem(menu, "Stop training", "3", 0); 
-	menu_additem(menu, "Add more bots", "4", 0); 
-	menu_additem(menu, "Kick a bot", "5", 0); 
-	menu_additem(menu, "Boost bots HP - 200/200", "6", 0);
-	menu_additem(menu, "Freeze bots", "7", 0); 
-	menu_additem(menu, "Unfreeze bots", "8", 0); 
-	menu_additem(menu, "Killing Blue Fade <ON/OFF>", "9", 0);
-	menu_additem(menu, "Drop weaponbox <ON/OFF>", "10", 0);
-	menu_additem(menu, "WallHack <ON/OFF>", "11", 0);
-
-	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
-	//menu_setprop(menu, MPROP_NOCOLORS, 1);
-	//menu_setprop(menu, MPROP_NUMBER_COLOR, "\w");
-
-	menu_display(id, menu, 0);
-	return PLUGIN_HANDLED;
-}
-
-public ShowMenu2(id)
-{
-	// bot level menu
-		menu2 = menu_create("Add bot by level:", "mh_MyMenu2");
-		menu_additem(menu2, "Add bot level 1 (highest)", "1", 0);
-		menu_additem(menu2, "Add bot level 2", "2", 0);
-		menu_additem(menu2, "Add bot level 3", "3", 0);
-		menu_additem(menu2, "Add bot level 4", "4", 0);
-		menu_additem(menu2, "Add bot level 5 (lowest)", "5", 0);
-		menu_setprop(menu2, MPROP_EXIT, MEXIT_ALL);
-		
-		menu_display(id, menu2, 0);
-		return PLUGIN_HANDLED;
-}
-
-public ShowMenu3(id)
-{
-	// bot level menu
-		menu3 = menu_create("Spawn Training Menu", "mh_MyMenu3");
-		menu_additem(menu3, "Add a moving bot", "1", 0);
-		menu_additem(menu3, "Add a stationary bot (fast spawn)", "2", 0);
-		menu_additem(menu3, "Remove bots", "3", 0);
-		menu_additem(menu3, "Show Spawn Info <ON/OFF>", "4", 0);
-		menu_additem(menu3, "Show Damage info <ON/OFF>", "5", 0);
-		menu_additem(menu3, "Killing Blue Fade <ON/OFF>", "6", 0);
-		menu_additem(menu3, "Drop weaponbox <ON/OFF>", "7", 0);
-		menu_additem(menu3, "WallHack <ON/OFF>", "8", 0);
-		menu_setprop(menu3, MPROP_EXIT, MEXIT_ALL);
-		
-		menu_display(id, menu3, 0);
-		return PLUGIN_HANDLED;
-}
-
-public ShowMenu4(id)
-{
-	new menu = menu_create("Choose the training map", "mh_MyMenu4");
-
-	menu_additem(menu, "[AIM-training] teylo_training_facility", "1", 0); 
-	menu_additem(menu, "[AIM-training] aimtrainingcenter", "2", 0); 
-	menu_additem(menu, "[AIM-training] aim_training", "3", 0); 
-	menu_additem(menu, "[AIM-training] hlaim_train", "4", 0); 
-	menu_additem(menu, "[AIM-training] fire_training_facility", "5", 0); 
-	menu_additem(menu, "[AIM-training] fire_reflex_training", "6", 0); 
-	menu_additem(menu, "[AIM-training] ptk_aimtracking2", "7", 0);
-	menu_additem(menu, "[AIM-training] fire_horizontal", "8", 0);
-	menu_additem(menu, "[BHOP-training] test_ro", "9", 0); 
-	menu_additem(menu, "[BHOP-training] test_ro2", "10", 0); 
-
-	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
-	//menu_setprop(menu, MPROP_NOCOLORS, 1);
-	//menu_setprop(menu, MPROP_NUMBER_COLOR, "\w");
-
-	menu_display(id, menu, 0);
-	return PLUGIN_HANDLED;
-}
-
-public mh_MyMenuS(id, menu, item)
-{
-	if(item == MENU_EXIT)
-	{
-		menu_cancel(id);
-		return PLUGIN_HANDLED;
-	}
-
-	new data[6], iName[64];
-	new access, callback;
-	menu_item_getinfo(menu, item, access, data,5, iName, 63, callback);
-
-	new key = str_to_num(data);
-	switch(key) 
-	{
-		case 1: 
-		{ 
-			client_print(id, print_chat, "^^8[Half-Life Aim Training] ^^2You have selected Classic Training");
-			// Menu verification for bots
-			gVerif = 1;
-			menu_destroy(menu);
-			ShowMenu(id);
-		}
-		case 2: 
-		{
-			client_print(id, print_chat, "^^8[Half-Life Aim Training] ^^2You have selected Spawn Training");
-			// Menu verification for bots
-			gVerif = 2;
-			menu_destroy(menu);
-			ShowMenu3(id);
-		}
-		case 3: 
-		{
-			client_print(id, print_chat, "^^8[Half-Life Aim Training] ^^2You have selected Training Maps");
-			// Menu verification for bots
-			menu_destroy(menu);
-			ShowMenu4(id);
-		}
-		case 4: 
-		{
-			challangeTrain(id);
-		}	
-
-	}
-	menu_display(id, menu, 0);
-	return PLUGIN_HANDLED;
-}
-
-
-public mh_MyMenu(id, menu, item)
-{
-	if(item == MENU_EXIT)
-	{
-		menu_cancel(id);
-		ShowMenuS(id);
-		return PLUGIN_HANDLED;
-	}
-
-	new data[6], iName[64];
-	new access, callback;
-	menu_item_getinfo(menu, item, access, data,5, iName, 63, callback);
-
-	new key = str_to_num(data);
-	switch(key) 
-	{
-		case 1: 
-		{ 
-			g_StartAmmo = true;
-			classicTrain(id);
-		}
-		case 2: 
-		{
-			g_StartAmmo = false;
-			classicTrain(id);
-		}
-		case 3: 
-		{
-			clcmdResetTimer(id);
-		}
-		case 4: 
-		{
-			menu_destroy(menu);
-			ShowMenu2(id);
-		}
-		case 5: 
-		{ 
-			//client_print(id, print_chat, "You have selected to Kick a bot");
-			kickBot(id);
-		}
-		case 6: 
-		{ 
-			switch_hp(id);
-		}
-		case 7: 
-		{ 
-			client_print(id, print_chat, "^^8[Classic Training] ^^5You have selected Freeze bots");
-			g_Freeze = true;
-			cmdFreeze();	
-			
-		}
-		case 8: 
-		{
-			client_print(id, print_chat, "^^8[Classic Training] ^^5You have selected Unfreeze bots");
-			g_Freeze = false;
-			cmdUnfreeze();	
-		}
-		case 9: 
-		{
-			switch_fade(id);
-		}	
-		case 10: 
-		{
-			switch_weaponbox(id);
-		}
-		case 11: 
-		{
-			switch_wh(id);
-		}		
-	}
-	menu_display(id, menu, 0);
-	return PLUGIN_HANDLED;
-}
-
-
-public mh_MyMenu2(id, menu, item)
-{
-	if(item == MENU_EXIT)
-	{
-		menu_cancel(id);
-		// Show the right menu on exit : Classic or Spawn training
-		if (gVerif == 1 )
-			ShowMenu(id);
-		if (gVerif == 2 )
-			ShowMenu3(id);
-		return PLUGIN_HANDLED;
-	}
-	new data[6], iName[64];
-	new access, callback;
-	menu_item_getinfo(menu, item, access, data,5, iName, 63, callback);
-		
-	new key = str_to_num(data);
-
-	switch(key)
-	{
-		case 1: 
-		{
-			server_cmd("jk_botti addbot ^"green^" ^"^" ^"1^"");
-			new num, players[32];
-			get_players(players,num); 
-			client_print(id, print_chat, "^^8[AIM Training] You added a Level ^^11 ^^8bot. There are ^^1%d ^^8bots added to the server", num);	
-			gBotCounter +=1
-		
-		}
-		case 2: 
-		{
-			server_cmd("jk_botti addbot ^"green^" ^"^" ^"2^"");
-			new num, players[32];
-			get_players(players,num); 
-			client_print(id, print_chat, "^^8[AIM Training] You added a Level ^^12 ^^8bot. There are ^^1%d ^^8bots added to the server", num);	
-			gBotCounter +=1
-		}
-		case 3: 
-		{
-			server_cmd("jk_botti addbot ^"green^" ^"^" ^"3^"");
-			new num, players[32];
-			get_players(players,num); 
-			client_print(id, print_chat, "^^8[AIM Training] You added a Level ^^13 ^^8bot. There are ^^1%d ^^8bots added to the server", num);
-			gBotCounter +=1
-		}
-		case 4: 
-		{
-			server_cmd("jk_botti addbot ^"green^" ^"^" ^"4^"");
-			new num, players[32];
-			get_players(players,num); 
-			client_print(id, print_chat, "^^8[AIM Training] You added a Level ^^14 ^^8bot. There are ^^1%d ^^8bots added to the server", num);
-			gBotCounter +=1
-		}
-		case 5: 
-		{
-			server_cmd("jk_botti addbot ^"green^" ^"^" ^"5^"");
-			new num, players[32];
-			get_players(players,num); 
-			client_print(id, print_chat, "^^8[AIM Training] You added a Level ^^15 ^^8bot. There are ^^1%d ^^8bots added to the server", num);	
-			gBotCounter +=1
-		}
-	}
-	menu_display(id, menu2, 0);
-	return PLUGIN_HANDLED;
-}
-
-public mh_MyMenu3(id, menu, item)
-{
-	if(item == MENU_EXIT)
-	{
-		menu_cancel(id);
-		ShowMenuS(id);
-		return PLUGIN_HANDLED;
-	}
-
-	new data[6], iName[64];
-	new access, callback;
-	menu_item_getinfo(menu, item, access, data,5, iName, 63, callback);
-
-	new key = str_to_num(data);
-	switch(key) 
-	{
-		case 1: 
-		{ 
-			client_print(id, print_chat, "^^8[Spawn Training] ^^2You choosed a moving bot");
-			menu_destroy(menu)
-			ShowMenu2(id)
-		}
-		case 2: 
-		{ 
-			client_print(id, print_chat, "^^8[Spawn Training] ^^2You added a stationary bot");
-			MTBot_Make(id)
-			gBotCounter +=1
-		}		
-		case 3: 
-		{ 
-			client_print(id, print_chat, "^^8[Spawn Training] ^^1You removed the all the bots");
-			MTBot_Remove(id)
-			gBotCounter =0
-		}			
-		case 4: 
-		{
-			switch_spawn(id)
-		}
-		case 5: 
-		{
-			switch_dmg(id)
-		}	
-		case 6: 
-		{
-			switch_fade(id);
-		}
-		case 7: 
-		{
-			switch_weaponbox(id);
-		}	
-		case 8: 
-		{
-			switch_wh(id);
-		}		
-	}
-	menu_display(id, menu, 0);
-	return PLUGIN_HANDLED;
-}
-
-public mh_MyMenu4(id, menu, item)
-{
-
-	if(item == MENU_EXIT)
-	{
-		menu_cancel(id);
-		ShowMenuS(id);
-		return PLUGIN_HANDLED;
-	}
-
-	new data[6], iName[64];
-	new access, callback;
-	menu_item_getinfo(menu, item, access, data,5, iName, 63, callback);
-
-	new key = str_to_num(data);
-	switch(key) 
-	{
-		case 1: 
-		{ 
-			client_print(id, print_chat, "^^8[Classic Training] You have selected the aim training map ^^1teylo_training_facility")
-			menu_destroy(menu)
-			server_cmd("amx_votemap teylo_training_facility")
-		}
-		case 2: 
-		{
-			client_print(id, print_chat, "^^8[Classic Training] You have selected the aim training map ^^1aimtrainingcenter")
-			menu_destroy(menu);
-			server_cmd("amx_votemap aimtrainingcenter")
-		}
-		case 3: 
-		{
-			client_print(id, print_chat, "^^8[Classic Training] You have selected the aim training map ^^1aim_training")
-			server_cmd("amx_votemap aim_training")
-			menu_destroy(menu);
-		}
-		case 4: 
-		{
-			client_print(id, print_chat, "^^8[Classic Training] You have selected the aim training map ^^1hlaim_train")
-			server_cmd("amx_votemap hlaim_train")
-			menu_destroy(menu);
-		}	
-		case 5: 
-		{
-			client_print(id, print_chat, "^^8[Classic Training] You have selected the aim training map ^^1fire_training_facility")
-			server_cmd("amx_votemap fire_training_facility")
-			menu_destroy(menu);
-		}	
-
-		case 6: 
-		{
-			client_print(id, print_chat, "^^8[Classic Training] You have selected the aim training map ^^1fire_reflex_training")
-			server_cmd("amx_votemap fire_reflex_training")
-			menu_destroy(menu);
-		}
-
-		case 7: 
-		{
-			client_print(id, print_chat, "^^8[Classic Training] You have selected the aim training map ^^1ptk_aimtracking2")
-			server_cmd("amx_votemap ptk_aimtracking2")
-			menu_destroy(menu);
-		}
-		case 8:
-		{
-			client_print(id, print_chat, "^^8[Classic Training] You have selected the aim training map ^^1fire_horizontal")
-			server_cmd("amx_votemap fire_horizontal")
-			menu_destroy(menu);
-		}
-		case 9: 
-		{ 
-			client_print(id, print_chat, "^^8[Classic Training] You have selected the bhop training map ^^1test_ro")
-			menu_destroy(menu);
-			server_cmd("amx_votemap test_ro")
-		}
-		case 10: 
-		{ 
-			client_print(id, print_chat, "^^8[Classic Training] You have selected the bhop training map ^^1test_ro2")
-			menu_destroy(menu);
-			server_cmd("amx_votemap test_ro2")
-		}
-		
-	}
-	menu_display(id, menu, 0);
-	return PLUGIN_HANDLED;
-}
-
-public kickBot(id)
-{
-	get_players(players, inum)
-
-	client_cmd(0, "spk vox/destroyed.wav")
-	
-	for(new i; i < inum; i++) {
-		player = players[i]
-		if (is_user_bot(player) ){
-			server_cmd("kick #%i", get_user_userid(players[i]))
-			gBotCounter -=1
-			client_print(id, print_chat, "^^8[AIM Training] There are ^^1%d ^^8bots left", gBotCounter)
-			i = inum
-		}
-	}
-
 }
 
 public cmdFreeze()
@@ -1252,55 +1282,60 @@ public fwd_Room(iEnt, id)
 
 public client_putinserver(id)
 {
-	playerConnect[id] = true;
-	if (playerConnect[id])
-	{
-		set_task(5.0,"joinMSG",id)
-	}
+	msgMenu[id] = true;						// Set the menu message to true
+	firstSpawn[id] = false;					// Set the first spawn to false
+	gConnexion[id] = 1;						// Set the connexion to 1
+	client_cmd(id,"violence_agibs 0");		// Hide the bones
+	client_cmd(id,"violence_hgibs 0");		// Hide the bones
 
-	gConnexion[id]=1;
-	client_cmd(id,"violence_agibs 0");
-	client_cmd(id,"violence_hgibs 0");
-	
-	// numpad vote system
-	client_cmd(id,"bind kp_end slot1");
-	client_cmd(id,"bind kp_downarrow slot2");
-	client_cmd(id,"bind kp_pgdn slot3");
-	client_cmd(id,"bind kp_leftarrow slot4");
-	client_cmd(id,"bind kp_5 slot5");
-	client_cmd(id,"bind kp_rightarrow slot6");
-	client_cmd(id,"bind kp_home slot7");
-	client_cmd(id,"bind kp_uparrow slot8");
-	client_cmd(id,"bind kp_pgup slot9");
-	client_cmd(id,"bind kp_ins slot10");
+	// Set the key bindings for the vote system
+	client_cmd(id,"bind kp_end slot1");				// Numpad 1 - vote 1
+	client_cmd(id,"bind kp_downarrow slot2");		// Numpad 2 - vote 2
+	client_cmd(id,"bind kp_pgdn slot3");			// Numpad 3 - vote 3
+	client_cmd(id,"bind kp_leftarrow slot4");		// Numpad 4 - vote 4
+	client_cmd(id,"bind kp_5 slot5");				// Numpad 5 - vote 5
+	client_cmd(id,"bind kp_rightarrow slot6");		// Numpad 6 - vote 6
+	client_cmd(id,"bind kp_home slot7");			// Numpad 7 - vote 7
+	client_cmd(id,"bind kp_uparrow slot8");			// Numpad 8 - vote 8
+	client_cmd(id,"bind kp_pgup slot9");			// Numpad 9 - vote 9
+	client_cmd(id,"bind kp_ins slot10");			// Numpad 0 - vote 0
 }
 
-public joinMSG(id) 
-{
-	client_print ( id , print_chat , "^^8[AIM Training Mod] ^^8Write ^^1/train ^^8to start the training");
-	playerConnect[id] = false;
-}
 
 public client_disconnected(id)
 {
 	if(gConnexion[id]==1)
 	{
 		// redisplay bones when disconnected
-		client_cmd(id,"violence_agibs 1");
-		client_cmd(id,"violence_hgibs 1");
+		client_cmd(id,"violence_agibs 1");	// Show the bones
+		client_cmd(id,"violence_hgibs 1");	// Show the bones
 		gConnexion[id]=0;
 	}
 	
-	whMessage[id]= false;
-	clcmdResetTimer(id);
-	remove_task(id);
-	//menu_cancel(id);
+	msgMenu[id] = false;					// Set the menu message to false
+	clcmdResetTimer(id);					// Reset the timer to avoid the timer to continue when the player is disconnected
+	remove_task(id);						// Remove the task
+	whMessage[id] = false;					// Set the wallhack message to false
+	firstSpawn[id] = false;					// Set the first spawn to false
 	return PLUGIN_HANDLED;
-
 }
+
+public OpenMenu(taskid)
+{
+	new id = taskid - TASKID;
+	remove_task(taskid);
+	ShowMenuMain(id);
+}
+
 
 public playerSpawn(id)
 {
+	// Check if the player is a bot and if it's the first spawn
+	if (!is_user_bot(id) && !firstSpawn[id])
+	{
+		firstSpawn[id] = true;						// Set the first spawn to true
+		set_task( 1.5, "OpenMenu", id + TASKID);	// Open the main menu after 1.5 seconds
+	}
 
 	// Teleport to center in hlaim_training map
 	new map_name[10];
@@ -1835,7 +1870,7 @@ public Fw_FmPlayerPreThinkPost(id)
 	}
 }
 
-public MTBot_Make(id)
+public Add_MTBot(id)
 {
 
 	new name[32]
@@ -1902,6 +1937,88 @@ public MTBot_Make(id)
 			get_bot_spawn(id_bot)
 		}
 	}
+
+	return PLUGIN_CONTINUE;
+}
+
+public Add_MTBot_Dummy(id)
+{
+	// calculate aim origin for the bot
+	new orig[3],Float:origin[3]
+	get_user_origin(id,orig,3)
+	
+	origin[0] = float(orig[0])
+	origin[1] = float(orig[1])
+	origin[2] = float(orig[2]) + 38.0
+	
+	// create a dummy bot
+	new name[32]
+	new bot_name[33] = "[DUMMY] BOT"
+	new bot_model[33] = "green"
+
+	if (hl_get_user_spectator(id))
+	{
+		client_print(id, print_chat, "^^8[DUMMY BOT] ^^1You can't create a bot when you are a spectator!")
+		return PLUGIN_HANDLED;
+	}
+
+	new playername[32]
+	get_user_name(id, playername, charsmax(playername))
+
+	formatex(name, 255, "%s %d", bot_name, random_num(100, 300)) 
+	new id_bot = engfunc(EngFunc_CreateFakeClient, name)
+	
+	if(!id_bot) {
+		client_print(id, print_chat, "^^8[DUMMY BOT] ^^1A bot can't join! This server may be full.")
+	}
+
+	if(pev_valid(id_bot)) {
+		engfunc(EngFunc_FreeEntPrivateData, id_bot)
+		dllfunc(MetaFunc_CallGameEntity, "player", id_bot)
+		set_user_info(id_bot, "rate", "3500")
+		set_user_info(id_bot, "cl_updaterate", "25")
+		set_user_info(id_bot, "cl_lw", "1")
+		set_user_info(id_bot, "cl_lc", "1")
+		set_user_info(id_bot, "cl_dlmax", "128")
+		set_user_info(id_bot, "_ah", "0")
+		set_user_info(id_bot, "dm", "0")
+		set_user_info(id_bot, "tracker", "0")
+		set_user_info(id_bot, "friends", "0")
+		set_user_info(id_bot, "*bot", "1" )
+		hl_set_user_team(id_bot, bot_model)
+		set_pev(id_bot, pev_flags, pev( id_bot, pev_flags ) | FL_FAKECLIENT)
+		set_pev(id_bot, pev_colormap, id_bot)
+		set_pev(id_bot, pev_gravity, 1.0)
+		set_pev(id_bot, pev_health, 100)
+		set_pev(id_bot, pev_weapons, 0)
+		set_user_gravity(id_bot, 1.0)
+		dllfunc(DLLFunc_ClientConnect, id_bot, "bot", "127.0.0.1")
+		dllfunc(DLLFunc_ClientPutInServer, id_bot)
+		engfunc(EngFunc_RunPlayerMove, id_bot, Float:{0.0,0.0,0.0}, 0.0, 0.0, 0.0, 0, 0, 76)
+		pev(id_bot, pev_origin, 1.0)
+		pev(id_bot, pev_velocity, 320.0)
+		hl_user_spawn(id_bot)
+		engfunc(EngFunc_DropToFloor, id_bot)
+		set_pev(id_bot, pev_effects, (pev(id_bot, pev_effects) | 1 ))
+		set_pev(id_bot, pev_solid, SOLID_BBOX)
+		set_user_rendering(id_bot, kRenderFxGlowShell, 0, 0, 0, kRenderNormal, 100)
+
+		if (hl_get_user_spectator(id_bot))
+		{
+			client_print(id, print_chat, "^^8[DUMMY BOT] ^^1You can't create a bot when match is started!")
+			server_cmd("kick #%i", get_user_userid(id_bot))
+		}
+		else
+		{
+			client_print(0, print_chat, "^^8[DUMMY BOT] ^^2%s^^8 created a DUMMY BOT.", playername)
+		}
+	}
+
+	// set bot origin
+	entity_set_origin(id_bot,origin)
+
+	// increment the number of bots
+	gBotCounter +=1;
 
 	return PLUGIN_CONTINUE;
 }
@@ -1988,7 +2105,22 @@ public AutoVote(id)
 	return PLUGIN_HANDLED
 }
 
-public switch_hp(id)
+public switch_wh(id)
+{
+	if(!whMessage[id])
+	{
+		whMessage[id]=true;
+		handleTurnWallHackOn(id)
+		client_print(id,print_chat,"^^8[Training] ^^2WallHack system activated.");
+	}else{
+		whMessage[id]=false;
+		handleTurnWallHackOff(id)
+		client_print(id,print_chat,"^^8[Training] ^^1WallHack system deactivated.");
+	}	
+	return PLUGIN_CONTINUE;
+}
+
+public switch_hp()
 {	
 	if(g_BoostBotHP==0)
 	{
@@ -2001,69 +2133,84 @@ public switch_hp(id)
 	return PLUGIN_CONTINUE;
 }
 
-public switch_spawn(id)
+public switch_spawn()
 {	
 	if(spawnMessage==0)
 	{
 		spawnMessage=1;
-		client_print(id,print_chat,"^^8[Spawn Training] ^^2Spawn system activated.");
+		client_print(0,print_chat,"^^8[Spawn Training] ^^2Spawn system activated.");
 	}else{
 		spawnMessage=0;
-		client_print(id,print_chat,"^^8[Spawn Training] ^^1Spawn system deactivated.");
+		client_print(0,print_chat,"^^8[Spawn Training] ^^1Spawn system deactivated.");
 	}	
 	return PLUGIN_CONTINUE;
 }
 
-public switch_dmg(id)
+public switch_dmg()
 {
 	if(dmgMessage==0)
 	{
 		dmgMessage=1;
-		client_print(id,print_chat,"^^8[Spawn Training] ^^2Damage system activated.");
+		client_print(0,print_chat,"^^8[Spawn Training] ^^2Damage system activated.");
 	}else{
 		dmgMessage=0;
-		client_print(id,print_chat,"^^8[Spawn Training] ^^1Damage system deactivated.");
+		client_print(0,print_chat,"^^8[Spawn Training] ^^1Damage system deactivated.");
 	}	
 	return PLUGIN_CONTINUE;
 }
 
-public switch_fade(id)
+public switch_fade()
 {
 	if(blueFade==0)
 	{
 		blueFade=1;
-		client_print(id,print_chat,"^^8[Spawn Training] ^^2Blue Fade Kill system activated.");
+		client_print(0,print_chat,"^^8[Spawn Training] ^^2Blue Fade Kill system activated.");
 	}else{
 		blueFade=0;
-		client_print(id,print_chat,"^^8[Spawn Training] ^^1Blue Fade Kill system deactivated.");
+		client_print(0,print_chat,"^^8[Spawn Training] ^^1Blue Fade Kill system deactivated.");
 	}	
 	return PLUGIN_CONTINUE;
 }
 
-public switch_weaponbox(id)
+public switch_weaponbox()
 {
 	if(weaponbox==0)
 	{
 		weaponbox=1;
-		client_print(id,print_chat,"^^8[Classic Training] ^^2Weaponbox system activated.");
+		client_print(0,print_chat,"^^8[Classic Training] ^^2Weaponbox system activated.");
 	}else{
 		weaponbox=0;
-		client_print(id,print_chat,"^^8[Classic Training] ^^2Weaponbox system deactivated.");
+		client_print(0,print_chat,"^^8[Classic Training] ^^1Weaponbox system deactivated.");
 	}	
 	return PLUGIN_CONTINUE;
 }
 
-public switch_wh(id)
+public switch_freezebots()
 {
-	if(!whMessage[id])
+	if(!g_Freeze)
 	{
-		whMessage[id]=true;
-		handleTurnWallHackOn(id)
-		client_print(id,print_chat,"^^8[Training] ^^2WallHack system activated.");
+
+		g_Freeze = true;
+		client_print(0,print_chat,"^^8[Classic Training] ^^2Freezing bots system activated.");
+		cmdFreeze();	
 	}else{
-		whMessage[id]=false;
-		handleTurnWallHackOff(id)
-		client_print(id,print_chat,"^^8[Training] ^^1WallHack system deactivated.");
+		g_Freeze = false;
+		client_print(0,print_chat,"^^8[Classic Training] ^^1Freezing bots system deactivated.");
+		cmdUnfreeze();	
+	}	
+	return PLUGIN_CONTINUE;
+}
+
+public switch_challange(id)
+{
+	
+	if(!g_chStarted[id])
+	{
+		g_chStarted[id] = true;
+		challangeTrain(id);
+	}else{
+		g_chStarted[id] = false;
+		clcmdResetTimer(id);	// Reset the timer
 	}	
 	return PLUGIN_CONTINUE;
 }
